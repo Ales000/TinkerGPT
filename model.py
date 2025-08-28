@@ -1,5 +1,3 @@
-
-
 import torch
 import torch.nn as nn
 import torch.optim as optim
@@ -283,11 +281,15 @@ def chat(user_input):
         clean_input = known_phrase
 
     found_known_phrases = []
-    remaining_input = clean_input
+    remaining_input = " " + clean_input + " "
     for phrase in sorted(known_questions, key=len, reverse=True):
-        if phrase in remaining_input:
+        # Используем пробелы для поиска целых слов/фраз
+        search_phrase = " " + phrase + " "
+        if search_phrase in remaining_input:
             found_known_phrases.append(phrase)
-            remaining_input = remaining_input.replace(phrase, "", 1).strip()
+            remaining_input = remaining_input.replace(search_phrase, " ", 1)
+    
+    remaining_input = remaining_input.strip()
 
     if len(found_known_phrases) == 1 and remaining_input:
         alias = remaining_input
@@ -316,7 +318,7 @@ def chat(user_input):
     final_response = ", ".join(unique_responses)
     return final_response.capitalize() if final_response else "Я не совсем понял, можешь перефразировать?"
 
-print("\nМодель теперь может учиться новым фразам. Попробуйте 'ало привет', а затем просто 'ало'.")
+print("\nУлучшенная модель 2.0. Попробуйте 'привет кто тв'.")
 while True:
     user_message = input("Вы: ")
     if user_message.lower() == 'выход':
