@@ -199,6 +199,7 @@ conversations = [
     ("благодарю", "всегда пожалуйста")
 ]
 known_questions = [clean_text(q) for q, a in conversations]
+known_words = set(" ".join(known_questions).split())
 augmented_conversations = augment_data(conversations)
 corpus = [q for q, a in augmented_conversations] + [a for q, a in augmented_conversations]
 tokenizer = BPETokenizer(vocab_size=70)
@@ -283,24 +284,27 @@ def chat(user_input):
     remaining_input = remaining_input.strip()
 
     if remaining_input:
-        best_match = None
-        min_dist = float('inf')
-        for question in known_questions:
-            dist = levenshtein_distance(remaining_input, question)
-            if dist < min_dist:
-                min_dist = dist
-                best_match = question
+        contains_known_words = any(word in known_words for word in remaining_input.split())
         
-        correction_threshold = 2
-        if min_dist <= correction_threshold:
-            print(f"(Думаю, '{remaining_input}' - это опечатка в '{best_match}')")
-            found_known_phrases.append(best_match)
-        elif len(found_known_phrases) == 1:
-            alias = remaining_input
-            known_part = found_known_phrases[0]
-            if alias not in known_questions and alias not in alias_memory:
-                alias_memory[alias] = known_part
-                print(f"(Запомнил новую ассоциацию: '{alias}' -> '{known_part}')")
+        if not contains_known_words and len(found_known_phrases) == 1:
+             alias = remaining_input
+             known_part = found_known_phrases[0]
+             if alias not in known_questions and alias not in alias_memory:
+                 alias_memory[alias] = known_part
+                 print(f"(Запомнил новую ассоциацию: '{alias}' -> '{known_part}')")
+        else:
+            best_match = None
+            min_dist = float('inf')
+            for question in known_questions:
+                dist = levenshtein_distance(remaining_input, question)
+                if dist < min_dist:
+                    min_dist = dist
+                    best_match = question
+            
+            correction_threshold = 2
+            if min_dist <= correction_threshold:
+                print(f"(Думаю, '{remaining_input}' - это опечатка в '{best_match}')")
+                found_known_phrases.append(best_match)
 
     if not found_known_phrases:
         best_match = None
@@ -321,7 +325,7 @@ def chat(user_input):
     final_response = ", ".join(unique_responses)
     return final_response.capitalize() if final_response else "Я не совсем понял, можешь перефразировать?"
 
-print("\nУлучшенная модель 2.0. Попробуйте 'привет кто тв'.")
+print("\nУлучшенная модель 3.0. Попробуйте 'привет кто тв'.")
 while True:
     user_message = input("Вы: ")
     if user_message.lower() == 'выход':
