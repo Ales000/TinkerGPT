@@ -293,7 +293,7 @@ num_heads = 4
 num_layers = 3
 d_ff = 512
 learning_rate = 0.0001
-epochs = 1000
+epochs = 3000
 model = Transformer(vocab_size, d_model, num_heads, num_layers, d_ff, PAD_ID).to(device)
 optimizer = optim.Adam(model.parameters(), lr=learning_rate)
 criterion = nn.CrossEntropyLoss(ignore_index=PAD_ID)
