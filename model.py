@@ -7,16 +7,6 @@ import collections
 import re
 import copy
 
-def softmax(x):
-    e_x = np.exp(x - np.max(x, axis=-1, keepdims=True))
-    return e_x / np.sum(e_x, axis=-1, keepdims=True)
-
-def relu(x):
-    return np.maximum(0, x)
-
-def initialize_weights(input_dim, output_dim):
-    return np.random.randn(input_dim, output_dim) * np.sqrt(1. / input_dim)
-
 def levenshtein_distance(s1, s2):
     if len(s1) < len(s2):
         return levenshtein_distance(s2, s1)
@@ -168,11 +158,13 @@ class Transformer(nn.Module):
     def make_tgt_mask(self, tgt):
         pad_mask = (tgt != self.pad_id).unsqueeze(1).unsqueeze(2)
         seq_len = tgt.shape[1]
-        seq_mask = torch.tril(torch.ones((seq_len, seq_len))).bool()
+        seq_mask = torch.tril(torch.ones((seq_len, seq_len), device=src.device)).bool()
         return pad_mask & seq_mask
     def forward(self, src, tgt):
         src_mask = self.make_src_mask(src)
         tgt_mask = self.make_tgt_mask(tgt)
+        src_device = src.device
+        tgt_device = tgt.device
         src = self.pos_encoder(self.embedding(src))
         tgt = self.pos_encoder(self.embedding(tgt))
         for layer in self.encoder_layers:
@@ -227,9 +219,11 @@ for q, a in augmented_conversations:
     src_data.append(pad_sequence(src_tokens + [EOS_ID], max_seq_length, PAD_ID))
     tgt_data.append(pad_sequence([SOS_ID] + tgt_tokens, max_seq_length, PAD_ID))
     y_labels.append(pad_sequence(tgt_tokens + [EOS_ID], max_seq_length, PAD_ID))
-src_data = torch.LongTensor(src_data)
-tgt_data = torch.LongTensor(tgt_data)
-y_labels = torch.LongTensor(y_labels)
+
+device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+src_data = torch.LongTensor(src_data).to(device)
+tgt_data = torch.LongTensor(tgt_data).to(device)
+y_labels = torch.LongTensor(y_labels).to(device)
 
 d_model = 128
 num_heads = 4
@@ -237,7 +231,7 @@ num_layers = 3
 d_ff = 512
 learning_rate = 0.0001
 epochs = 500
-model = Transformer(vocab_size, d_model, num_heads, num_layers, d_ff, PAD_ID)
+model = Transformer(vocab_size, d_model, num_heads, num_layers, d_ff, PAD_ID).to(device)
 optimizer = optim.Adam(model.parameters(), lr=learning_rate)
 criterion = nn.CrossEntropyLoss(ignore_index=PAD_ID)
 print("Начало обучения на PyTorch...")
@@ -257,11 +251,11 @@ alias_memory = {}
 def _generate_single_response(clean_input):
     model.eval()
     src_tokens = tokenizer.encode(clean_input)
-    src_tensor = torch.LongTensor([pad_sequence(src_tokens + [EOS_ID], max_seq_length, PAD_ID)])
+    src_tensor = torch.LongTensor([pad_sequence(src_tokens + [EOS_ID], max_seq_length, PAD_ID)]).to(device)
     output_ids = [SOS_ID]
     for _ in range(max_seq_length - 1):
         with torch.no_grad():
-            tgt_tensor = torch.LongTensor([pad_sequence(output_ids, max_seq_length, PAD_ID)])
+            tgt_tensor = torch.LongTensor([pad_sequence(output_ids, max_seq_length, PAD_ID)]).to(device)
             output = model(src_tensor, tgt_tensor)
         last_logits = output[0, len(output_ids) - 1, :]
         probs = torch.softmax(last_logits, dim=-1)
@@ -283,7 +277,6 @@ def chat(user_input):
     found_known_phrases = []
     remaining_input = " " + clean_input + " "
     for phrase in sorted(known_questions, key=len, reverse=True):
-        # Используем пробелы для поиска целых слов/фраз
         search_phrase = " " + phrase + " "
         if search_phrase in remaining_input:
             found_known_phrases.append(phrase)
@@ -291,12 +284,25 @@ def chat(user_input):
     
     remaining_input = remaining_input.strip()
 
-    if len(found_known_phrases) == 1 and remaining_input:
-        alias = remaining_input
-        known_part = found_known_phrases[0]
-        if alias not in known_questions and alias not in alias_memory:
-            alias_memory[alias] = known_part
-            print(f"(Запомнил новую ассоциацию: '{alias}' -> '{known_part}')")
+    if remaining_input:
+        best_match = None
+        min_dist = float('inf')
+        for question in known_questions:
+            dist = levenshtein_distance(remaining_input, question)
+            if dist < min_dist:
+                min_dist = dist
+                best_match = question
+        
+        correction_threshold = 2
+        if min_dist <= correction_threshold:
+            print(f"(Думаю, '{remaining_input}' - это опечатка в '{best_match}')")
+            found_known_phrases.append(best_match)
+        elif len(found_known_phrases) == 1:
+            alias = remaining_input
+            known_part = found_known_phrases[0]
+            if alias not in known_questions and alias not in alias_memory:
+                alias_memory[alias] = known_part
+                print(f"(Запомнил новую ассоциацию: '{alias}' -> '{known_part}')")
 
     if not found_known_phrases:
         best_match = None
@@ -306,7 +312,6 @@ def chat(user_input):
             if dist < min_dist:
                 min_dist = dist
                 best_match = question
-        correction_threshold = 2
         if min_dist <= correction_threshold:
             print(f"(Думаю, вы имели в виду: '{best_match}')")
             found_known_phrases.append(best_match)
@@ -324,4 +329,4 @@ while True:
     if user_message.lower() == 'выход':
         break
     response = chat(user_message)
-    print(f"Бот: {response}")
+    print(f"B1TLER-GPT: {response}")
