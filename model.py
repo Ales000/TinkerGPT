@@ -284,27 +284,28 @@ def chat(user_input):
     remaining_input = remaining_input.strip()
 
     if remaining_input:
-        contains_known_words = any(word in known_words for word in remaining_input.split())
+        best_match = None
+        min_dist = float('inf')
+        all_known_items = known_questions + list(alias_memory.keys())
+        for item in all_known_items:
+            dist = levenshtein_distance(remaining_input, item)
+            if dist < min_dist:
+                min_dist = dist
+                best_match = item
         
-        if not contains_known_words and len(found_known_phrases) == 1:
-             alias = remaining_input
-             known_part = found_known_phrases[0]
-             if alias not in known_questions and alias not in alias_memory:
-                 alias_memory[alias] = known_part
-                 print(f"(Запомнил новую ассоциацию: '{alias}' -> '{known_part}')")
-        else:
-            best_match = None
-            min_dist = float('inf')
-            for question in known_questions:
-                dist = levenshtein_distance(remaining_input, question)
-                if dist < min_dist:
-                    min_dist = dist
-                    best_match = question
-            
-            correction_threshold = 2
-            if min_dist <= correction_threshold:
-                print(f"(Думаю, '{remaining_input}' - это опечатка в '{best_match}')")
-                found_known_phrases.append(best_match)
+        correction_threshold = 2
+        if min_dist <= correction_threshold:
+            print(f"(Думаю, '{remaining_input}' - это опечатка в '{best_match}')")
+            # Если исправление - это алиас, используем его значение
+            corrected_phrase = alias_memory.get(best_match, best_match)
+            found_known_phrases.append(corrected_phrase)
+        elif len(found_known_phrases) == 1:
+            alias = remaining_input
+            known_part = found_known_phrases[0]
+            contains_known_words = any(word in known_words for word in alias.split())
+            if not contains_known_words and alias not in known_questions and alias not in alias_memory:
+                alias_memory[alias] = known_part
+                print(f"(Запомнил новую ассоциацию: '{alias}' -> '{known_part}')")
 
     if not found_known_phrases:
         best_match = None
