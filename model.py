@@ -298,9 +298,11 @@ def chat(user_input):
 
     found_known_phrases = []
     remaining_input = " " + clean_input + " "
+    original_positions = {}
     for phrase in sorted(known_questions, key=len, reverse=True):
         search_phrase = " " + phrase + " "
         if search_phrase in remaining_input:
+            original_positions[phrase] = clean_input.find(phrase)
             found_known_phrases.append(phrase)
             remaining_input = remaining_input.replace(search_phrase, " ", 1)
     
@@ -321,6 +323,7 @@ def chat(user_input):
             print(f"(Думаю, '{remaining_input}' - это опечатка в '{best_match}')")
             corrected_phrase = alias_memory.get(best_match, best_match)
             if corrected_phrase not in found_known_phrases:
+                original_positions[corrected_phrase] = clean_input.find(remaining_input)
                 found_known_phrases.append(corrected_phrase)
         elif len(found_known_phrases) == 1:
             alias = remaining_input
@@ -344,12 +347,13 @@ def chat(user_input):
         else:
             return _generate_single_response(clean_input)
     
-    responses = [_generate_single_response(phrase) for phrase in found_known_phrases]
+    sorted_phrases = sorted(found_known_phrases, key=lambda p: original_positions.get(p, -1))
+    responses = [_generate_single_response(phrase) for phrase in sorted_phrases]
     unique_responses = list(dict.fromkeys(responses))
     final_response = ", ".join(unique_responses)
     return final_response.capitalize() if final_response else "Я не совсем понял, можешь перефразировать?"
 
-print("\nУлучшенная модель 3.0. Попробуйте 'ало привет', затем 'ало', а затем 'привет алт'.")
+print("\nУлучшенная модель 4.0. Попробуйте 'привет кто тв' или 'как дела ало'.")
 while True:
     user_message = input("Вы: ")
     if user_message.lower() == 'выход':
