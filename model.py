@@ -192,16 +192,15 @@ def augment_data(conversations):
     return augmented
 
 conversations = [
-    ("привет", "здравствуй"), ("добрый день", "и вам добрый"), ("здравствуй", "и тебе привет"),
-    ("пока", "до скорой встречи"), ("до свидания", "всего хорошего"),
-    ("кто ты", "я нейросеть текстовая модель"), ("как тебя зовут", "у меня нет имени"),
-    ("что ты умеешь", "я могу отвечать на простые вопросы"),
-    ("как дела", "все отлично спасибо что спросил"), ("большое спасибо", "не за что"),
-    ("благодарю", "всегда пожалуйста"),
+    ("привет", "здравствуй"), ("добрый день", "и вам добрый"),
+    ("пока", "до скорой встречи"), ("кто ты", "я нейросеть"),
+    ("как тебя зовут", "у меня нет имени"),
+    ("что ты умеешь", "я могу отвечать на вопросы"),
+    ("как дела", "все отлично спасибо что спросил"),
+    ("спасибо", "пожалуйста"),
     ("меня зовут", "очень приятно познакомиться")
 ]
 known_questions = [clean_text(q) for q, a in conversations]
-known_words = set(" ".join(known_questions).split())
 augmented_conversations = augment_data(conversations)
 corpus = [q for q, a in augmented_conversations] + [a for q, a in augmented_conversations]
 tokenizer = BPETokenizer(vocab_size=70)
@@ -225,6 +224,7 @@ device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 src_data = torch.LongTensor(src_data_list).to(device)
 tgt_data = torch.LongTensor(tgt_data_list).to(device)
 y_labels = torch.LongTensor(y_labels_list).to(device)
+known_words = set(clean_text(" ".join(corpus)).split())
 
 d_model = 128
 num_heads = 4
@@ -281,6 +281,7 @@ def _generate_single_response(clean_input):
 
 def chat(user_input):
     clean_input = clean_text(user_input)
+    correction_threshold = 2
     
     words = clean_input.split()
     for i, word in enumerate(words):
@@ -316,7 +317,6 @@ def chat(user_input):
                 min_dist = dist
                 best_match = item
         
-        correction_threshold = 2
         if min_dist <= correction_threshold:
             print(f"(Думаю, '{remaining_input}' - это опечатка в '{best_match}')")
             corrected_phrase = alias_memory.get(best_match, best_match)
