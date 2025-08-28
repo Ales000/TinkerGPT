@@ -158,13 +158,11 @@ class Transformer(nn.Module):
     def make_tgt_mask(self, tgt):
         pad_mask = (tgt != self.pad_id).unsqueeze(1).unsqueeze(2)
         seq_len = tgt.shape[1]
-        seq_mask = torch.tril(torch.ones((seq_len, seq_len), device=src.device)).bool()
+        seq_mask = torch.tril(torch.ones((seq_len, seq_len), device=tgt.device)).bool()
         return pad_mask & seq_mask
     def forward(self, src, tgt):
         src_mask = self.make_src_mask(src)
         tgt_mask = self.make_tgt_mask(tgt)
-        src_device = src.device
-        tgt_device = tgt.device
         src = self.pos_encoder(self.embedding(src))
         tgt = self.pos_encoder(self.embedding(tgt))
         for layer in self.encoder_layers:
@@ -212,18 +210,18 @@ EOS_ID = tokenizer.token_to_id["<eos>"]
 max_seq_length = 20
 def pad_sequence(tokens, max_len, pad_id):
     return (tokens + [pad_id] * max_len)[:max_len]
-src_data, tgt_data, y_labels = [], [], []
+src_data_list, tgt_data_list, y_labels_list = [], [], []
 for q, a in augmented_conversations:
     src_tokens = tokenizer.encode(q)
     tgt_tokens = tokenizer.encode(a)
-    src_data.append(pad_sequence(src_tokens + [EOS_ID], max_seq_length, PAD_ID))
-    tgt_data.append(pad_sequence([SOS_ID] + tgt_tokens, max_seq_length, PAD_ID))
-    y_labels.append(pad_sequence(tgt_tokens + [EOS_ID], max_seq_length, PAD_ID))
+    src_data_list.append(pad_sequence(src_tokens + [EOS_ID], max_seq_length, PAD_ID))
+    tgt_data_list.append(pad_sequence([SOS_ID] + tgt_tokens, max_seq_length, PAD_ID))
+    y_labels_list.append(pad_sequence(tgt_tokens + [EOS_ID], max_seq_length, PAD_ID))
 
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-src_data = torch.LongTensor(src_data).to(device)
-tgt_data = torch.LongTensor(tgt_data).to(device)
-y_labels = torch.LongTensor(y_labels).to(device)
+src_data = torch.LongTensor(src_data_list).to(device)
+tgt_data = torch.LongTensor(tgt_data_list).to(device)
+y_labels = torch.LongTensor(y_labels_list).to(device)
 
 d_model = 128
 num_heads = 4
