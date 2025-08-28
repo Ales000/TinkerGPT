@@ -296,17 +296,22 @@ if os.path.exists(MODEL_PATH) and os.path.exists(TOKENIZER_PATH):
     tokenizer.load(TOKENIZER_PATH)
     vocab_size = len(tokenizer.vocab)
     PAD_ID = tokenizer.token_to_id["<pad>"]
+    SOS_ID = tokenizer.token_to_id["<sos>"]
+    EOS_ID = tokenizer.token_to_id["<eos>"]
     model = Transformer(vocab_size, d_model, num_heads, num_layers, d_ff, PAD_ID)
     model.load_state_dict(torch.load(MODEL_PATH))
     print("Модель успешно загружена.")
 else:
     print("Сохраненные файлы не найдены. Начинаем новый цикл обучения...")
     augmented_conversations = augment_data(conversations)
+    print(f"Аугментация завершена. Исходных примеров: {len(conversations)}, стало: {len(augmented_conversations)}")
     corpus = [q for q, a in augmented_conversations] + [a for q, a in augmented_conversations]
     tokenizer = BPETokenizer(vocab_size=70)
     tokenizer.train(corpus)
     vocab_size = len(tokenizer.vocab)
     PAD_ID = tokenizer.token_to_id["<pad>"]
+    SOS_ID = tokenizer.token_to_id["<sos>"]
+    EOS_ID = tokenizer.token_to_id["<eos>"]
     
     src_data_list, tgt_data_list, y_labels_list = [], [], []
     for q, a in augmented_conversations:
@@ -343,8 +348,6 @@ else:
     tokenizer.save(TOKENIZER_PATH)
     print("Обучение завершено. Модель и токенизатор сохранены.")
 
-SOS_ID = tokenizer.token_to_id["<sos>"]
-EOS_ID = tokenizer.token_to_id["<eos>"]
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 model.to(device)
 alias_memory = {}
@@ -435,7 +438,7 @@ def chat(user_input):
                 print(f"(Память алиасов: запомнил '{alias}' -> '{known_part}')")
 
     if not found_known_phrases:
-        if not clean_input: # Handle empty input
+        if not clean_input:
             return "Пожалуйста, скажите что-нибудь."
         best_match = None
         min_dist = float('inf')
