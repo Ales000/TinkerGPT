@@ -6,7 +6,6 @@ import math
 import collections
 import re
 import copy
-import random
 
 # --- Вспомогательные функции ---
 def softmax(x):
@@ -206,13 +205,12 @@ def augment_data(conversations):
     return augmented
 
 conversations = [
-    ("привет", "здравствуй"), ("добрый день", "и вам добрый"),
-    ("пока", "до скорой встречи"), ("кто ты", "я нейросеть"),
-    ("как тебя зовут", "у меня нет имени"),
-    ("что ты умеешь", "я могу отвечать на вопросы"),
-    ("как дела", "все отлично спасибо что спросил"),
-    ("спасибо", "пожалуйста"),
-    ("меня зовут", "очень приятно")
+    ("привет", "здравствуй"), ("добрый день", "и вам добрый"), ("здравствуй", "и тебе привет"),
+    ("пока", "до скорой встречи"), ("до свидания", "всего хорошего"),
+    ("кто ты", "я нейросеть текстовая модель"), ("как тебя зовут", "у меня нет имени"),
+    ("что ты умеешь", "я могу отвечать на простые вопросы"),
+    ("как дела", "все отлично спасибо что спросил"), ("большое спасибо", "не за что"),
+    ("благодарю", "всегда пожалуйста")
 ]
 known_questions = [clean_text(q) for q, a in conversations]
 augmented_conversations = augment_data(conversations)
@@ -236,7 +234,6 @@ for q, a in augmented_conversations:
 src_data = torch.LongTensor(src_data)
 tgt_data = torch.LongTensor(tgt_data)
 y_labels = torch.LongTensor(y_labels)
-known_training_words = set(clean_text(" ".join(corpus)).split())
 
 # --- Обучение на PyTorch ---
 d_model = 128
@@ -248,7 +245,7 @@ epochs = 500
 model = Transformer(vocab_size, d_model, num_heads, num_layers, d_ff, PAD_ID)
 optimizer = optim.Adam(model.parameters(), lr=learning_rate)
 criterion = nn.CrossEntropyLoss(ignore_index=PAD_ID)
-print("Начало обучения...")
+print("Начало обучения на PyTorch...")
 model.train()
 for epoch in range(epochs):
     optimizer.zero_grad()
@@ -260,8 +257,8 @@ for epoch in range(epochs):
         print(f"Эпоха {epoch+1}/{epochs}, Потери: {loss.item():.4f}")
 print("Обучение завершено.")
 
-# --- Логика общения с краткосрочной памятью ---
-session_memory = collections.defaultdict(list)
+# --- Логика общения с "Памятью Алиасов" ---
+alias_memory = {}
 
 def _generate_single_response(clean_input):
     model.eval()
@@ -272,45 +269,33 @@ def _generate_single_response(clean_input):
         with torch.no_grad():
             tgt_tensor = torch.LongTensor([pad_sequence(output_ids, max_seq_length, PAD_ID)])
             output = model(src_tensor, tgt_tensor)
-        
         last_logits = output[0, len(output_ids) - 1, :]
-        last_token_id = output_ids[-1]
-        last_word = tokenizer.decode([last_token_id])
-        
-        if last_word in session_memory and random.random() < 0.5:
-            new_word = random.choice(session_memory[last_word])
-            # Упрощенная логика: просто добавляем слово к ответу
-            response = tokenizer.decode(output_ids) + " " + new_word
-            return response.replace("<sos>", "").strip()
-
         probs = torch.softmax(last_logits, dim=-1)
         next_word_id = torch.argmax(probs).item()
-        
         if next_word_id == EOS_ID:
             break
         output_ids.append(next_word_id)
-        
     raw_response = tokenizer.decode(output_ids)
     return raw_response.replace("<sos>", "").strip()
 
 def chat(user_input):
     clean_input = clean_text(user_input)
-    
-    # Логика "Запоминания"
-    words = clean_input.split()
-    for i, word in enumerate(words):
-        if word not in known_training_words and i > 0:
-            prev_word = words[i-1]
-            if prev_word in known_training_words:
-                session_memory[prev_word].append(word)
-                print(f"(Запомнил: после слова '{prev_word}' может идти '{word}')")
 
-    # Принцип Салфетки
+    if clean_input in alias_memory:
+        known_phrase = alias_memory[clean_input]
+        print(f"(Использую сохраненную ассоциацию: '{clean_input}' -> '{known_phrase}')")
+        clean_input = known_phrase
+
     found_known_phrases = []
-    for phrase in known_questions:
+    for phrase in sorted(known_questions, key=len, reverse=True):
         if phrase in clean_input:
             found_known_phrases.append(phrase)
-    
+            alias = clean_input.replace(phrase, "").strip()
+            if alias and alias not in known_questions and alias not in alias_memory:
+                alias_memory[alias] = phrase
+                print(f"(Запомнил новую ассоциацию: '{alias}' -> '{phrase}')")
+            break
+
     if not found_known_phrases:
         best_match = None
         min_dist = float('inf')
@@ -325,14 +310,14 @@ def chat(user_input):
             found_known_phrases.append(best_match)
         else:
             return _generate_single_response(clean_input)
-            
+
     responses = [_generate_single_response(phrase) for phrase in found_known_phrases]
     unique_responses = list(dict.fromkeys(responses))
     final_response = ", ".join(unique_responses)
-    return final_response.capitalize() if final_response else "Я не совсем понял, можешь перефразиовать?"
+    return final_response.capitalize() if final_response else "Я не совсем понял, можешь перефразировать?"
 
 # --- чат ---
-print("\nB1TLER_GPT 1.0")
+print("\nB1TLER_GPT-1.1 ")
 while True:
     user_message = input("Вы: ")
     if user_message.lower() == 'выход':
