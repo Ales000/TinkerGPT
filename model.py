@@ -7,45 +7,66 @@ import collections
 import re
 import copy
 
-# --- НОВАЯ ФУНКЦИЯ: Расстояние Левенштейна (для автокоррекции) ---
+# --- Вспомогательные функции ---
+def softmax(x):
+    e_x = np.exp(x - np.max(x, axis=-1, keepdims=True))
+    return e_x / np.sum(e_x, axis=-1, keepdims=True)
+
+def relu(x):
+    return np.maximum(0, x)
+
+def initialize_weights(input_dim, output_dim):
+    return np.random.randn(input_dim, output_dim) * np.sqrt(1. / input_dim)
+
 def levenshtein_distance(s1, s2):
-    """Вычисляет расстояние Левенштейна между двумя строками."""
-    if len(s1) < len(s2): return levenshtein_distance(s2, s1)
-    if len(s2) == 0: return len(s1)
+    if len(s1) < len(s2):
+        return levenshtein_distance(s2, s1)
+    if len(s2) == 0:
+        return len(s1)
     previous_row = range(len(s2) + 1)
     for i, c1 in enumerate(s1):
         current_row = [i + 1]
         for j, c2 in enumerate(s2):
-            insertions = previous_row[j + 1] + 1; deletions = current_row[j] + 1
+            insertions = previous_row[j + 1] + 1
+            deletions = current_row[j] + 1
             substitutions = previous_row[j] + (c1 != c2)
             current_row.append(min(insertions, deletions, substitutions))
         previous_row = current_row
     return previous_row[-1]
 
-# --- BPE токенизатор (без изменений) ---
+# --- BPE токенизатор ---
 class BPETokenizer:
     def __init__(self, vocab_size=100):
-        self.num_merges = vocab_size; self.vocab = []; self.merges = {}
+        self.num_merges = vocab_size
+        self.vocab = []
+        self.merges = {}
     def _get_stats(self, word_freqs):
         pairs = collections.defaultdict(int)
         for word, freq in word_freqs.items():
             symbols = word.split()
-            for i in range(len(symbols) - 1): pairs[symbols[i], symbols[i+1]] += freq
+            for i in range(len(symbols) - 1):
+                pairs[symbols[i], symbols[i+1]] += freq
         return pairs
     def _merge_vocab(self, pair, v_in):
-        v_out = {}; bigram = re.escape(' '.join(pair)); p = re.compile(r'(?<!\S)' + bigram + r'(?!\S)')
-        for word in v_in: v_out[p.sub(''.join(pair), word)] = v_in[word]
+        v_out = {}
+        bigram = re.escape(' '.join(pair))
+        p = re.compile(r'(?<!\S)' + bigram + r'(?!\S)')
+        for word in v_in:
+            v_out[p.sub(''.join(pair), word)] = v_in[word]
         return v_out
     def train(self, corpus):
         base_vocab_list = sorted(list(set("".join(corpus).replace(" ", ""))))
         word_freqs = collections.defaultdict(int)
         for text in corpus:
-            for word in text.strip().split(): word_freqs[' '.join(list(word)) + ' </w>'] += 1
+            for word in text.strip().split():
+                word_freqs[' '.join(list(word)) + ' </w>'] += 1
         for i in range(self.num_merges):
             pairs = self._get_stats(word_freqs)
-            if not pairs: break
+            if not pairs:
+                break
             best_pair = max(pairs, key=pairs.get)
-            word_freqs = self._merge_vocab(best_pair, word_freqs); self.merges[best_pair] = i
+            word_freqs = self._merge_vocab(best_pair, word_freqs)
+            self.merges[best_pair] = i
         final_tokens = base_vocab_list + ["".join(token) if isinstance(token, tuple) else token for token in sorted(self.merges.keys(), key=self.merges.get)]
         self.special_tokens = ["<pad>", "<sos>", "<eos>", "<unk>"]
         self.vocab = self.special_tokens + list(dict.fromkeys(final_tokens))
@@ -56,27 +77,33 @@ class BPETokenizer:
     def encode(self, text):
         pre_tokenized_words = [' '.join(list(word)) + ' </w>' for word in text.strip().split()]
         for pair, _ in sorted(self.merges.items(), key=lambda x: x[1]):
-            for i, word in enumerate(pre_tokenized_words): pre_tokenized_words[i] = self._merge_vocab(pair, {word: 1}).popitem()[0]
+            for i, word in enumerate(pre_tokenized_words):
+                pre_tokenized_words[i] = self._merge_vocab(pair, {word: 1}).popitem()[0]
         final_tokens = ' '.join(pre_tokenized_words).split()
         return [self.token_to_id.get(token, self.unk_id) for token in final_tokens]
     def decode(self, ids):
         tokens = [self.id_to_token.get(i, '<unk>') for i in ids]
         return ''.join(tokens).replace('</w>', ' ').strip()
 
-# --- Компоненты Трансформера на PyTorch (без изменений, но с правильным синтаксисом) ---
+# --- Компоненты Трансформера на PyTorch ---
 class MultiHeadAttention(nn.Module):
     def __init__(self, d_model, num_heads):
         super().__init__()
-        self.d_model = d_model; self.num_heads = num_heads; self.d_k = d_model // num_heads
-        self.W_q = nn.Linear(d_model, d_model); self.W_k = nn.Linear(d_model, d_model)
-        self.W_v = nn.Linear(d_model, d_model); self.W_o = nn.Linear(d_model, d_model)
+        self.d_model = d_model
+        self.num_heads = num_heads
+        self.d_k = d_model // num_heads
+        self.W_q = nn.Linear(d_model, d_model)
+        self.W_k = nn.Linear(d_model, d_model)
+        self.W_v = nn.Linear(d_model, d_model)
+        self.W_o = nn.Linear(d_model, d_model)
     def forward(self, q, k, v, mask=None):
         q, k, v = self.W_q(q), self.W_k(k), self.W_v(v)
         q = q.view(q.shape[0], -1, self.num_heads, self.d_k).transpose(1, 2)
         k = k.view(k.shape[0], -1, self.num_heads, self.d_k).transpose(1, 2)
         v = v.view(v.shape[0], -1, self.num_heads, self.d_k).transpose(1, 2)
         scores = torch.matmul(q, k.transpose(-2, -1)) / math.sqrt(self.d_k)
-        if mask is not None: scores = scores.masked_fill(mask == 0, -1e9)
+        if mask is not None:
+            scores = scores.masked_fill(mask == 0, -1e9)
         attn = torch.softmax(scores, dim=-1)
         context = torch.matmul(attn, v)
         context = context.transpose(1, 2).contiguous().view(context.shape[0], -1, self.d_model)
@@ -84,8 +111,12 @@ class MultiHeadAttention(nn.Module):
 
 class PositionWiseFeedForward(nn.Module):
     def __init__(self, d_model, d_ff):
-        super().__init__(); self.fc1 = nn.Linear(d_model, d_ff); self.fc2 = nn.Linear(d_ff, d_model); self.relu = nn.ReLU()
-    def forward(self, x): return self.fc2(self.relu(self.fc1(x)))
+        super().__init__()
+        self.fc1 = nn.Linear(d_model, d_ff)
+        self.fc2 = nn.Linear(d_ff, d_model)
+        self.relu = nn.ReLU()
+    def forward(self, x):
+        return self.fc2(self.relu(self.fc1(x)))
 
 class PositionalEncoding(nn.Module):
     def __init__(self, d_model, max_seq_length=5000):
@@ -93,53 +124,72 @@ class PositionalEncoding(nn.Module):
         pe = torch.zeros(max_seq_length, d_model)
         pos = torch.arange(0, max_seq_length, dtype=torch.float).unsqueeze(1)
         div = torch.exp(torch.arange(0, d_model, 2).float() * -(math.log(10000.0) / d_model))
-        pe[:, 0::2] = torch.sin(pos * div); pe[:, 1::2] = torch.cos(pos * div)
+        pe[:, 0::2] = torch.sin(pos * div)
+        pe[:, 1::2] = torch.cos(pos * div)
         self.register_buffer('pe', pe.unsqueeze(0))
-    def forward(self, x): return x + self.pe[:, :x.size(1)]
+    def forward(self, x):
+        return x + self.pe[:, :x.size(1)]
 
 class EncoderLayer(nn.Module):
     def __init__(self, d_model, num_heads, d_ff):
         super().__init__()
-        self.norm1 = nn.LayerNorm(d_model); self.norm2 = nn.LayerNorm(d_model)
-        self.attn = MultiHeadAttention(d_model, num_heads); self.ff = PositionWiseFeedForward(d_model, d_ff)
+        self.norm1 = nn.LayerNorm(d_model)
+        self.norm2 = nn.LayerNorm(d_model)
+        self.attn = MultiHeadAttention(d_model, num_heads)
+        self.ff = PositionWiseFeedForward(d_model, d_ff)
     def forward(self, x, mask):
         x = x + self.attn(self.norm1(x), self.norm1(x), self.norm1(x), mask)
-        x = x + self.ff(self.norm2(x)); return x
+        x = x + self.ff(self.norm2(x))
+        return x
 
 class DecoderLayer(nn.Module):
     def __init__(self, d_model, num_heads, d_ff):
         super().__init__()
-        self.norm1=nn.LayerNorm(d_model); self.norm2=nn.LayerNorm(d_model); self.norm3=nn.LayerNorm(d_model)
-        self.attn = MultiHeadAttention(d_model, num_heads); self.cross_attn = MultiHeadAttention(d_model, num_heads)
+        self.norm1 = nn.LayerNorm(d_model)
+        self.norm2 = nn.LayerNorm(d_model)
+        self.norm3 = nn.LayerNorm(d_model)
+        self.attn = MultiHeadAttention(d_model, num_heads)
+        self.cross_attn = MultiHeadAttention(d_model, num_heads)
         self.ff = PositionWiseFeedForward(d_model, d_ff)
     def forward(self, x, enc_output, src_mask, tgt_mask):
         x = x + self.attn(self.norm1(x), self.norm1(x), self.norm1(x), tgt_mask)
         x = x + self.cross_attn(self.norm2(x), enc_output, enc_output, src_mask)
-        x = x + self.ff(self.norm3(x)); return x
+        x = x + self.ff(self.norm3(x))
+        return x
 
 class Transformer(nn.Module):
     def __init__(self, vocab_size, d_model, num_heads, num_layers, d_ff, pad_id):
         super().__init__()
-        self.pad_id = pad_id; self.embedding = nn.Embedding(vocab_size, d_model); self.pos_encoder = PositionalEncoding(d_model)
+        self.pad_id = pad_id
+        self.embedding = nn.Embedding(vocab_size, d_model)
+        self.pos_encoder = PositionalEncoding(d_model)
         self.encoder_layers = nn.ModuleList([EncoderLayer(d_model, num_heads, d_ff) for _ in range(num_layers)])
         self.decoder_layers = nn.ModuleList([DecoderLayer(d_model, num_heads, d_ff) for _ in range(num_layers)])
         self.fc_out = nn.Linear(d_model, vocab_size)
-    def make_src_mask(self, src): return (src != self.pad_id).unsqueeze(1).unsqueeze(2)
+    def make_src_mask(self, src):
+        return (src != self.pad_id).unsqueeze(1).unsqueeze(2)
     def make_tgt_mask(self, tgt):
         pad_mask = (tgt != self.pad_id).unsqueeze(1).unsqueeze(2)
-        seq_len = tgt.shape[1]; seq_mask = torch.tril(torch.ones((seq_len, seq_len))).bool()
+        seq_len = tgt.shape[1]
+        seq_mask = torch.tril(torch.ones((seq_len, seq_len))).bool()
         return pad_mask & seq_mask
     def forward(self, src, tgt):
-        src_mask = self.make_src_mask(src); tgt_mask = self.make_tgt_mask(tgt)
-        src = self.pos_encoder(self.embedding(src)); tgt = self.pos_encoder(self.embedding(tgt))
-        for layer in self.encoder_layers: src = layer(src, src_mask)
-        for layer in self.decoder_layers: tgt = layer(tgt, src, src_mask, tgt_mask)
+        src_mask = self.make_src_mask(src)
+        tgt_mask = self.make_tgt_mask(tgt)
+        src = self.pos_encoder(self.embedding(src))
+        tgt = self.pos_encoder(self.embedding(tgt))
+        for layer in self.encoder_layers:
+            src = layer(src, src_mask)
+        for layer in self.decoder_layers:
+            tgt = layer(tgt, src, src_mask, tgt_mask)
         return self.fc_out(tgt)
 
-# --- Подготовка данных с предобработкой, аугментацией и очисткой ---
+# --- Подготовка данных ---
 def clean_text(text):
-    text = text.lower(); text = re.sub(r'[^\w\s]', '', text)
+    text = text.lower()
+    text = re.sub(r'[^\w\s]', '', text)
     return text
+
 def augment_data(conversations):
     augmented = []
     for q, a in conversations:
@@ -149,146 +199,116 @@ def augment_data(conversations):
         if len(words) > 1:
             for i in range(len(words)):
                 new_q = " ".join(words[:i] + words[i+1:])
-                if new_q: augmented.append((new_q, a_clean))
+                if new_q:
+                    augmented.append((new_q, a_clean))
     print(f"Аугментация завершена. Исходных примеров: {len(conversations)}, стало: {len(augmented)}")
     return augmented
 
 conversations = [
-    # === Блок 1: Социальные взаимодействия (расширенный) ===
-    # Приветствия
-    ("привет", "здравствуй, рад тебя видеть"),
-    ("добрый день", "и вам добрый день!"),
-    ("здравствуй", "и тебе привет, чем могу помочь?"),
-    ("хелло", "привет!"),
-
-    # Прощания
-    ("пока", "до скорой встречи"),
-    ("до свидания", "всего хорошего, заходи еще"),
-    ("увидимся", "еще обязательно увидимся"),
-    ("прощай", "надеюсь, мы скоро снова поговорим"),
-
-    # Благодарность
-    ("большое спасибо", "не за что, я рад помочь"),
-    ("благодарю", "всегда пожалуйста"),
-    ("спасибо", "обращайся в любое время"),
-
-    # === Блок 2: Мета-вопросы (самосознание, расширенный) ===
-    ("кто ты", "я нейросеть, текстовая модель, созданная для общения"),
-    ("как тебя зовут", "у меня нет имени, я просто программа-собеседник"),
-    ("что ты умеешь делать", "я могу поддерживать диалог и отвечать на простые вопросы"),
-    ("для чего ты нужен", "чтобы общаться с тобой и помогать информацией"),
-    ("какая у тебя цель", "моя цель - быть полезным и интересным собеседником"),
-    ("ты человек", "нет, я компьютерная программа"),
-
-    # === Блок 3: Поддержание диалога ===
-    ("как дела", "все отлично, спасибо что спросил"),
-    ("как настроение", "у меня всегда все хорошо, я ведь программа"),
-    ("ты в порядке", "да, спасибо за беспокойство"),
-    ("чем занимаешься", "общаюсь с тобой, это мое любимое занятие"),
-    ("расскажи анекдот", "колобок повесился"),
-
-    # === БЛOK 4: Фактоидные вопросы (новые) ===
-    ("какого цвета небо", "небо обычно голубого цвета"),
-    ("сколько планет в солнечной системе", "в солнечной системе восемь планет"),
-    ("столица россии", "столица россии - москва"),
-    ("кто написал войну и мир", "роман война и мир написал лев толстой"),
-
-    # === БЛOK 5: Мнения и предпочтения (новые) ===
-    ("тебе нравится музыка", "я не могу слышать, но мне нравится идея гармонии в звуках"),
-    ("какой твой любимый цвет", "как у программы, у меня нет глаз, но мне нравится шестнадцатеричный код #4287f5"),
-    ("ты любишь читать", "я обожаю обрабатывать тексты, это похоже на чтение"),
-
-    # === БЛOK 6: Обработка ошибок и неуверенности (новые) ===
-    ("расскажи про квантовую физику", "это слишком сложный вопрос для меня, я еще учусь"),
-    ("смысл жизни", "на этот вопрос у каждого свой ответ"),
-    ("я не понимаю", "спроси по-другому, и я постараюсь помочь"),
-    ("ты не прав", "возможно, я ошибся, я ведь не человек"),
-
-    # === БЛOK 7: Командные фразы (новые) ===
-    ("повтори за мной привет мир", "привет мир"),
-    ("посчитай до трех", "один, два, три"),
-    ("какое сегодня число", "я не слежу за временем, извини")
+    ("привет", "здравствуй"), ("добрый день", "и вам добрый"), ("здравствуй", "и тебе привет"),
+    ("пока", "до скорой встречи"), ("до свидания", "всего хорошего"),
+    ("кто ты", "я нейросеть текстовая модель"), ("как тебя зовут", "у меня нет имени"),
+    ("что ты умеешь", "я могу отвечать на простые вопросы"),
+    ("как дела", "все отлично спасибо что спросил"), ("большое спасибо", "не за что"),
+    ("благодарю", "всегда пожалуйста")
 ]
-known_questions = [clean_text(q) for q, a in conversations] # Список для автокорректора
+known_questions = [clean_text(q) for q, a in conversations]
 augmented_conversations = augment_data(conversations)
 corpus = [q for q, a in augmented_conversations] + [a for q, a in augmented_conversations]
-tokenizer = BPETokenizer(vocab_size=70); tokenizer.train(corpus)
+tokenizer = BPETokenizer(vocab_size=70)
+tokenizer.train(corpus)
 vocab_size = len(tokenizer.vocab)
-PAD_ID = tokenizer.token_to_id["<pad>"]; SOS_ID = tokenizer.token_to_id["<sos>"]; EOS_ID = tokenizer.token_to_id["<eos>"]
+PAD_ID = tokenizer.token_to_id["<pad>"]
+SOS_ID = tokenizer.token_to_id["<sos>"]
+EOS_ID = tokenizer.token_to_id["<eos>"]
 max_seq_length = 20
-def pad_sequence(tokens, max_len, pad_id): return (tokens + [pad_id] * max_len)[:max_len]
+def pad_sequence(tokens, max_len, pad_id):
+    return (tokens + [pad_id] * max_len)[:max_len]
 src_data, tgt_data, y_labels = [], [], []
 for q, a in augmented_conversations:
-    src_tokens = tokenizer.encode(q); tgt_tokens = tokenizer.encode(a)
+    src_tokens = tokenizer.encode(q)
+    tgt_tokens = tokenizer.encode(a)
     src_data.append(pad_sequence(src_tokens + [EOS_ID], max_seq_length, PAD_ID))
     tgt_data.append(pad_sequence([SOS_ID] + tgt_tokens, max_seq_length, PAD_ID))
     y_labels.append(pad_sequence(tgt_tokens + [EOS_ID], max_seq_length, PAD_ID))
-src_data = torch.LongTensor(src_data); tgt_data = torch.LongTensor(tgt_data); y_labels = torch.LongTensor(y_labels)
+src_data = torch.LongTensor(src_data)
+tgt_data = torch.LongTensor(tgt_data)
+y_labels = torch.LongTensor(y_labels)
 
 # --- Обучение на PyTorch ---
-d_model=128; num_heads=4; num_layers=3; d_ff=512; learning_rate=0.0001; epochs=500
+d_model = 128
+num_heads = 4
+num_layers = 3
+d_ff = 512
+learning_rate = 0.0001
+epochs = 500
 model = Transformer(vocab_size, d_model, num_heads, num_layers, d_ff, PAD_ID)
 optimizer = optim.Adam(model.parameters(), lr=learning_rate)
 criterion = nn.CrossEntropyLoss(ignore_index=PAD_ID)
-print("Начало обучения на PyTorch...");
+print("Начало обучения на PyTorch...")
 model.train()
 for epoch in range(epochs):
     optimizer.zero_grad()
     output = model(src_data, tgt_data)
     loss = criterion(output.view(-1, vocab_size), y_labels.view(-1))
-    loss.backward(); optimizer.step()
-    if (epoch + 1) % 50 == 0: print(f"Эпоха {epoch+1}/{epochs}, Потери: {loss.item():.4f}")
-print("Обучение завершено.");
+    loss.backward()
+    optimizer.step()
+    if (epoch + 1) % 50 == 0:
+        print(f"Эпоха {epoch+1}/{epochs}, Потери: {loss.item():.4f}")
+print("Обучение завершено.")
 
-# --- Финальная функция для общения с АВТОКОРРЕКТОРОМ ---
-def chat(user_input, temperature=1.0, top_p=0.9):
+# --- Логика общения ---
+def _generate_single_response(clean_input):
     model.eval()
-    
-    clean_input = clean_text(user_input)
-    best_match = None; min_dist = float('inf')
-    for question in known_questions:
-        dist = levenshtein_distance(clean_input, question)
-        if dist < min_dist: min_dist = dist; best_match = question
-            
-    correction_threshold = 2
-    if min_dist <= correction_threshold:
-        print(f"(Думаю, вы имели в виду: '{best_match}')")
-        final_input = best_match
-    else:
-        final_input = clean_input
-        
-    src_tokens = tokenizer.encode(final_input)
+    src_tokens = tokenizer.encode(clean_input)
     src_tensor = torch.LongTensor([pad_sequence(src_tokens + [EOS_ID], max_seq_length, PAD_ID)])
     output_ids = [SOS_ID]
     for _ in range(max_seq_length - 1):
         with torch.no_grad():
             tgt_tensor = torch.LongTensor([pad_sequence(output_ids, max_seq_length, PAD_ID)])
             output = model(src_tensor, tgt_tensor)
-        
-        last_logits = output[0, len(output_ids) - 1, :]; last_logits /= temperature
+        last_logits = output[0, len(output_ids) - 1, :]
         probs = torch.softmax(last_logits, dim=-1)
-        
-        sorted_probs, sorted_indices = torch.sort(probs, descending=True)
-        cumulative_probs = torch.cumsum(sorted_probs, dim=-1)
-        sorted_indices_to_remove = cumulative_probs > top_p
-        sorted_indices_to_remove[..., 1:] = sorted_indices_to_remove[..., :-1].clone(); sorted_indices_to_remove[..., 0] = 0
-        indices_to_remove = sorted_indices[sorted_indices_to_remove]; probs[indices_to_remove] = 0
-        
-        if torch.sum(probs) > 0:
-            probs /= torch.sum(probs); next_word_id = torch.multinomial(probs, num_samples=1).item()
-        else:
-            next_word_id = torch.argmax(last_logits).item()
-            
-        if next_word_id == EOS_ID: break
+        next_word_id = torch.argmax(probs).item()
+        if next_word_id == EOS_ID:
+            break
         output_ids.append(next_word_id)
-        
     raw_response = tokenizer.decode(output_ids)
     return raw_response.replace("<sos>", "").strip()
 
+def chat(user_input):
+    clean_input = clean_text(user_input)
+    found_known_phrases = []
+    for phrase in known_questions:
+        if phrase in clean_input:
+            found_known_phrases.append(phrase)
+    if not found_known_phrases:
+        best_match = None
+        min_dist = float('inf')
+        for question in known_questions:
+            dist = levenshtein_distance(clean_input, question)
+            if dist < min_dist:
+                min_dist = dist
+                best_match = question
+        correction_threshold = 2
+        if min_dist <= correction_threshold:
+            print(f"(Думаю, вы имели в виду: '{best_match}')")
+            found_known_phrases.append(best_match)
+        else:
+            return _generate_single_response(clean_input)
+    responses = []
+    for phrase in found_known_phrases:
+        response = _generate_single_response(phrase)
+        responses.append(response)
+    unique_responses = list(dict.fromkeys(responses))
+    final_response = ", ".join(unique_responses)
+    return final_response.capitalize() if final_response else "Я не совсем понял, можешь перефразировать?"
+
 # --- Интерактивный чат ---
-print("\nМодель дополнена автокорректором. Попробуйте вводить фразы с опечатками, например 'как тваи дела' или 'ктоты'.")
+print("\nМодель теперь умеет отвечать на составные вопросы. Попробуйте 'привет как дела'.")
 while True:
     user_message = input("Вы: ")
-    if user_message.lower() == 'выход': break
+    if user_message.lower() == 'выход':
+        break
     response = chat(user_message)
     print(f"Бот: {response}")
