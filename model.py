@@ -1,3 +1,5 @@
+
+
 import torch
 import torch.nn as nn
 import torch.optim as optim
@@ -7,7 +9,6 @@ import collections
 import re
 import copy
 
-# --- Вспомогательные функции ---
 def softmax(x):
     e_x = np.exp(x - np.max(x, axis=-1, keepdims=True))
     return e_x / np.sum(e_x, axis=-1, keepdims=True)
@@ -34,7 +35,6 @@ def levenshtein_distance(s1, s2):
         previous_row = current_row
     return previous_row[-1]
 
-# --- BPE токенизатор ---
 class BPETokenizer:
     def __init__(self, vocab_size=100):
         self.num_merges = vocab_size
@@ -85,7 +85,6 @@ class BPETokenizer:
         tokens = [self.id_to_token.get(i, '<unk>') for i in ids]
         return ''.join(tokens).replace('</w>', ' ').strip()
 
-# --- Компоненты Трансформера на PyTorch ---
 class MultiHeadAttention(nn.Module):
     def __init__(self, d_model, num_heads):
         super().__init__()
@@ -184,7 +183,6 @@ class Transformer(nn.Module):
             tgt = layer(tgt, src, src_mask, tgt_mask)
         return self.fc_out(tgt)
 
-# --- Подготовка данных ---
 def clean_text(text):
     text = text.lower()
     text = re.sub(r'[^\w\s]', '', text)
@@ -235,7 +233,6 @@ src_data = torch.LongTensor(src_data)
 tgt_data = torch.LongTensor(tgt_data)
 y_labels = torch.LongTensor(y_labels)
 
-# --- Обучение на PyTorch ---
 d_model = 128
 num_heads = 4
 num_layers = 3
@@ -257,7 +254,6 @@ for epoch in range(epochs):
         print(f"Эпоха {epoch+1}/{epochs}, Потери: {loss.item():.4f}")
 print("Обучение завершено.")
 
-# --- Логика общения с "Памятью Алиасов" ---
 alias_memory = {}
 
 def _generate_single_response(clean_input):
@@ -287,14 +283,18 @@ def chat(user_input):
         clean_input = known_phrase
 
     found_known_phrases = []
+    remaining_input = clean_input
     for phrase in sorted(known_questions, key=len, reverse=True):
-        if phrase in clean_input:
+        if phrase in remaining_input:
             found_known_phrases.append(phrase)
-            alias = clean_input.replace(phrase, "").strip()
-            if alias and alias not in known_questions and alias not in alias_memory:
-                alias_memory[alias] = phrase
-                print(f"(Запомнил новую ассоциацию: '{alias}' -> '{phrase}')")
-            break
+            remaining_input = remaining_input.replace(phrase, "", 1).strip()
+
+    if len(found_known_phrases) == 1 and remaining_input:
+        alias = remaining_input
+        known_part = found_known_phrases[0]
+        if alias not in known_questions and alias not in alias_memory:
+            alias_memory[alias] = known_part
+            print(f"(Запомнил новую ассоциацию: '{alias}' -> '{known_part}')")
 
     if not found_known_phrases:
         best_match = None
@@ -310,17 +310,16 @@ def chat(user_input):
             found_known_phrases.append(best_match)
         else:
             return _generate_single_response(clean_input)
-
+    
     responses = [_generate_single_response(phrase) for phrase in found_known_phrases]
     unique_responses = list(dict.fromkeys(responses))
     final_response = ", ".join(unique_responses)
     return final_response.capitalize() if final_response else "Я не совсем понял, можешь перефразировать?"
 
-# --- чат ---
-print("\nB1TLER_GPT-1.1 ")
+print("\nМодель теперь может учиться новым фразам. Попробуйте 'ало привет', а затем просто 'ало'.")
 while True:
     user_message = input("Вы: ")
     if user_message.lower() == 'выход':
         break
     response = chat(user_message)
-    print(f"B1TLER-GPT: {response}")
+    print(f"Бот: {response}")
