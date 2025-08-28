@@ -192,15 +192,16 @@ def augment_data(conversations):
     return augmented
 
 conversations = [
-    ("привет", "здравствуй"), ("добрый день", "и вам добрый"),
-    ("пока", "до скорой встречи"), ("кто ты", "я нейросеть"),
-    ("как тебя зовут", "у меня нет имени"),
-    ("что ты умеешь", "я могу отвечать на вопросы"),
-    ("как дела", "все отлично спасибо что спросил"),
-    ("спасибо", "пожалуйста"),
+    ("привет", "здравствуй"), ("добрый день", "и вам добрый"), ("здравствуй", "и тебе привет"),
+    ("пока", "до скорой встречи"), ("до свидания", "всего хорошего"),
+    ("кто ты", "я нейросеть текстовая модель"), ("как тебя зовут", "у меня нет имени"),
+    ("что ты умеешь", "я могу отвечать на простые вопросы"),
+    ("как дела", "все отлично спасибо что спросил"), ("большое спасибо", "не за что"),
+    ("благодарю", "всегда пожалуйста"),
     ("меня зовут", "очень приятно познакомиться")
 ]
 known_questions = [clean_text(q) for q, a in conversations]
+known_words = set(" ".join(known_questions).split())
 augmented_conversations = augment_data(conversations)
 corpus = [q for q, a in augmented_conversations] + [a for q, a in augmented_conversations]
 tokenizer = BPETokenizer(vocab_size=70)
@@ -224,7 +225,6 @@ device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 src_data = torch.LongTensor(src_data_list).to(device)
 tgt_data = torch.LongTensor(tgt_data_list).to(device)
 y_labels = torch.LongTensor(y_labels_list).to(device)
-known_words = set(clean_text(" ".join(corpus)).split())
 
 d_model = 128
 num_heads = 4
@@ -255,7 +255,6 @@ def _generate_single_response(clean_input):
     src_tokens = tokenizer.encode(clean_input)
     src_tensor = torch.LongTensor([pad_sequence(src_tokens + [EOS_ID], max_seq_length, PAD_ID)]).to(device)
     output_ids = [SOS_ID]
-    generated_text = ""
     for _ in range(max_seq_length - 1):
         with torch.no_grad():
             tgt_tensor = torch.LongTensor([pad_sequence(output_ids, max_seq_length, PAD_ID)]).to(device)
@@ -266,8 +265,8 @@ def _generate_single_response(clean_input):
         
         if last_word in context_memory and random.random() < 0.7:
             new_word = random.choice(context_memory[last_word])
-            generated_text = tokenizer.decode(output_ids).replace("<sos>", "").strip() + " " + new_word
-            return generated_text
+            response = tokenizer.decode(output_ids) + " " + new_word
+            return response.replace("<sos>", "").strip()
 
         probs = torch.softmax(last_logits, dim=-1)
         next_word_id = torch.argmax(probs).item()
@@ -312,6 +311,7 @@ def chat(user_input):
         min_dist = float('inf')
         all_known_items = known_questions + list(alias_memory.keys())
         for item in all_known_items:
+            if remaining_input == item: continue
             dist = levenshtein_distance(remaining_input, item)
             if dist < min_dist:
                 min_dist = dist
@@ -349,7 +349,7 @@ def chat(user_input):
     final_response = ", ".join(unique_responses)
     return final_response.capitalize() if final_response else "Я не совсем понял, можешь перефразировать?"
 
-print("\nМодель с двумя видами памяти. Попробуйте 'ало привет', а затем 'меня зовут [Имя]'.")
+print("\nУлучшенная модель 3.0. Попробуйте 'ало привет', затем 'ало', а затем 'привет алт'.")
 while True:
     user_message = input("Вы: ")
     if user_message.lower() == 'выход':
