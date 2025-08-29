@@ -9,9 +9,8 @@ import copy
 import random
 import os
 import json
-from typing import List, Dict, Tuple, Optional
 
-def levenshtein_distance(s1: str, s2: str) -> int:
+def levenshtein_distance(s1, s2):
     if len(s1) < len(s2):
         return levenshtein_distance(s2, s1)
     if len(s2) == 0:
@@ -28,31 +27,25 @@ def levenshtein_distance(s1: str, s2: str) -> int:
     return previous_row[-1]
 
 class BPETokenizer:
-    def __init__(self, vocab_size: int = 100):
+    def __init__(self, vocab_size=100):
         self.num_merges = vocab_size
-        self.vocab: List[str] = []
-        self.merges: Dict[Tuple[str, str], int] = {}
-        self.token_to_id: Dict[str, int] = {}
-        self.id_to_token: Dict[int, str] = {}
-        self.unk_id: int = 3
-
-    def _get_stats(self, word_freqs: Dict[str, int]) -> collections.defaultdict:
+        self.vocab = []
+        self.merges = {}
+    def _get_stats(self, word_freqs):
         pairs = collections.defaultdict(int)
         for word, freq in word_freqs.items():
             symbols = word.split()
             for i in range(len(symbols) - 1):
                 pairs[symbols[i], symbols[i+1]] += freq
         return pairs
-
-    def _merge_vocab(self, pair: Tuple[str, str], v_in: Dict[str, int]) -> Dict[str, int]:
+    def _merge_vocab(self, pair, v_in):
         v_out = {}
         bigram = re.escape(' '.join(pair))
         p = re.compile(r'(?<!\S)' + bigram + r'(?!\S)')
         for word in v_in:
             v_out[p.sub(''.join(pair), word)] = v_in[word]
         return v_out
-
-    def train(self, corpus: List[str]):
+    def train(self, corpus):
         base_vocab_list = sorted(list(set("".join(corpus).replace(" ", ""))))
         word_freqs = collections.defaultdict(int)
         for text in corpus:
@@ -72,26 +65,25 @@ class BPETokenizer:
         self.id_to_token = {i: token for i, token in enumerate(self.vocab)}
         self.unk_id = self.token_to_id["<unk>"]
         print(f"BPE токенизатор обучен. Размер словаря: {len(self.vocab)}")
-
-    def encode(self, text: str) -> List[int]:
+    def encode(self, text):
         pre_tokenized_words = [' '.join(list(word)) + ' </w>' for word in text.strip().split()]
         for pair, _ in sorted(self.merges.items(), key=lambda x: x[1]):
             for i, word in enumerate(pre_tokenized_words):
                 pre_tokenized_words[i] = self._merge_vocab(pair, {word: 1}).popitem()[0]
         final_tokens = ' '.join(pre_tokenized_words).split()
         return [self.token_to_id.get(token, self.unk_id) for token in final_tokens]
-
-    def decode(self, ids: List[int]) -> str:
+    def decode(self, ids):
         tokens = [self.id_to_token.get(i, '<unk>') for i in ids]
         return ''.join(tokens).replace('</w>', ' ').strip()
-
-    def save(self, filepath: str = 'bpe_tokenizer.json'):
-        data = {'vocab': self.vocab, 'merges': {'_'.join(k): v for k, v in self.merges.items()}}
+    def save(self, filepath='bpe_tokenizer.json'):
+        data = {
+            'vocab': self.vocab,
+            'merges': {'_'.join(k): v for k, v in self.merges.items()}
+        }
         with open(filepath, 'w', encoding='utf-8') as f:
             json.dump(data, f, ensure_ascii=False, indent=2)
         print(f"Токенизатор сохранен в {filepath}")
-
-    def load(self, filepath: str = 'bpe_tokenizer.json'):
+    def load(self, filepath='bpe_tokenizer.json'):
         with open(filepath, 'r', encoding='utf-8') as f:
             data = json.load(f)
         self.vocab = data['vocab']
@@ -102,13 +94,16 @@ class BPETokenizer:
         print(f"Токенизатор загружен из {filepath}. Размер словаря: {len(self.vocab)}")
 
 class MultiHeadAttention(nn.Module):
-    def __init__(self, d_model: int, num_heads: int):
+    def __init__(self, d_model, num_heads):
         super().__init__()
-        self.d_model = d_model; self.num_heads = num_heads; self.d_k = d_model // num_heads
-        self.W_q = nn.Linear(d_model, d_model); self.W_k = nn.Linear(d_model, d_model)
-        self.W_v = nn.Linear(d_model, d_model); self.W_o = nn.Linear(d_model, d_model)
-
-    def forward(self, q: torch.Tensor, k: torch.Tensor, v: torch.Tensor, mask: Optional[torch.Tensor] = None) -> torch.Tensor:
+        self.d_model = d_model
+        self.num_heads = num_heads
+        self.d_k = d_model // num_heads
+        self.W_q = nn.Linear(d_model, d_model)
+        self.W_k = nn.Linear(d_model, d_model)
+        self.W_v = nn.Linear(d_model, d_model)
+        self.W_o = nn.Linear(d_model, d_model)
+    def forward(self, q, k, v, mask=None):
         q, k, v = self.W_q(q), self.W_k(k), self.W_v(v)
         q = q.view(q.shape[0], -1, self.num_heads, self.d_k).transpose(1, 2)
         k = k.view(k.shape[0], -1, self.num_heads, self.d_k).transpose(1, 2)
@@ -122,17 +117,16 @@ class MultiHeadAttention(nn.Module):
         return self.W_o(context)
 
 class PositionWiseFeedForward(nn.Module):
-    def __init__(self, d_model: int, d_ff: int):
+    def __init__(self, d_model, d_ff):
         super().__init__()
         self.fc1 = nn.Linear(d_model, d_ff)
         self.fc2 = nn.Linear(d_ff, d_model)
         self.relu = nn.ReLU()
-
-    def forward(self, x: torch.Tensor) -> torch.Tensor:
+    def forward(self, x):
         return self.fc2(self.relu(self.fc1(x)))
 
 class PositionalEncoding(nn.Module):
-    def __init__(self, d_model: int, max_seq_length: int = 5000):
+    def __init__(self, d_model, max_seq_length=5000):
         super().__init__()
         pe = torch.zeros(max_seq_length, d_model)
         pos = torch.arange(0, max_seq_length, dtype=torch.float).unsqueeze(1)
@@ -140,25 +134,23 @@ class PositionalEncoding(nn.Module):
         pe[:, 0::2] = torch.sin(pos * div)
         pe[:, 1::2] = torch.cos(pos * div)
         self.register_buffer('pe', pe.unsqueeze(0))
-
-    def forward(self, x: torch.Tensor) -> torch.Tensor:
+    def forward(self, x):
         return x + self.pe[:, :x.size(1)]
 
 class EncoderLayer(nn.Module):
-    def __init__(self, d_model: int, num_heads: int, d_ff: int):
+    def __init__(self, d_model, num_heads, d_ff):
         super().__init__()
         self.norm1 = nn.LayerNorm(d_model)
         self.norm2 = nn.LayerNorm(d_model)
         self.attn = MultiHeadAttention(d_model, num_heads)
         self.ff = PositionWiseFeedForward(d_model, d_ff)
-
-    def forward(self, x: torch.Tensor, mask: torch.Tensor) -> torch.Tensor:
+    def forward(self, x, mask):
         x = x + self.attn(self.norm1(x), self.norm1(x), self.norm1(x), mask)
         x = x + self.ff(self.norm2(x))
         return x
 
 class DecoderLayer(nn.Module):
-    def __init__(self, d_model: int, num_heads: int, d_ff: int):
+    def __init__(self, d_model, num_heads, d_ff):
         super().__init__()
         self.norm1 = nn.LayerNorm(d_model)
         self.norm2 = nn.LayerNorm(d_model)
@@ -166,15 +158,14 @@ class DecoderLayer(nn.Module):
         self.attn = MultiHeadAttention(d_model, num_heads)
         self.cross_attn = MultiHeadAttention(d_model, num_heads)
         self.ff = PositionWiseFeedForward(d_model, d_ff)
-
-    def forward(self, x: torch.Tensor, enc_output: torch.Tensor, src_mask: torch.Tensor, tgt_mask: torch.Tensor) -> torch.Tensor:
+    def forward(self, x, enc_output, src_mask, tgt_mask):
         x = x + self.attn(self.norm1(x), self.norm1(x), self.norm1(x), tgt_mask)
         x = x + self.cross_attn(self.norm2(x), enc_output, enc_output, src_mask)
         x = x + self.ff(self.norm3(x))
         return x
 
 class Transformer(nn.Module):
-    def __init__(self, vocab_size: int, d_model: int, num_heads: int, num_layers: int, d_ff: int, pad_id: int):
+    def __init__(self, vocab_size, d_model, num_heads, num_layers, d_ff, pad_id):
         super().__init__()
         self.pad_id = pad_id
         self.embedding = nn.Embedding(vocab_size, d_model)
@@ -182,17 +173,14 @@ class Transformer(nn.Module):
         self.encoder_layers = nn.ModuleList([EncoderLayer(d_model, num_heads, d_ff) for _ in range(num_layers)])
         self.decoder_layers = nn.ModuleList([DecoderLayer(d_model, num_heads, d_ff) for _ in range(num_layers)])
         self.fc_out = nn.Linear(d_model, vocab_size)
-
-    def make_src_mask(self, src: torch.Tensor) -> torch.Tensor:
+    def make_src_mask(self, src):
         return (src != self.pad_id).unsqueeze(1).unsqueeze(2)
-
-    def make_tgt_mask(self, tgt: torch.Tensor) -> torch.Tensor:
+    def make_tgt_mask(self, tgt):
         pad_mask = (tgt != self.pad_id).unsqueeze(1).unsqueeze(2)
         seq_len = tgt.shape[1]
         seq_mask = torch.tril(torch.ones((seq_len, seq_len), device=tgt.device)).bool()
         return pad_mask & seq_mask
-
-    def forward(self, src: torch.Tensor, tgt: torch.Tensor) -> torch.Tensor:
+    def forward(self, src, tgt):
         src_mask = self.make_src_mask(src)
         tgt_mask = self.make_tgt_mask(tgt)
         src = self.pos_encoder(self.embedding(src))
@@ -203,49 +191,12 @@ class Transformer(nn.Module):
             tgt = layer(tgt, src, src_mask, tgt_mask)
         return self.fc_out(tgt)
 
-class ImprovedContextMemory:
-    def __init__(self, max_size: int = 1000, window_size: int = 2):
-        self.context_memory: Dict[Tuple[str, ...], List[str]] = collections.defaultdict(list)
-        self.max_size = max_size
-        self.window_size = window_size
-        self.usage_count: Dict[Tuple[str, ...], int] = collections.defaultdict(int)
-    
-    def add_context(self, words: List[str], next_word: str) -> None:
-        if len(words) < self.window_size:
-            return
-        context_key = tuple(words[-self.window_size:])
-        if len(self.context_memory) >= self.max_size:
-            self._cleanup_memory()
-        if next_word not in self.context_memory[context_key]:
-            self.context_memory[context_key].append(next_word)
-        if len(self.context_memory[context_key]) > 5:
-            self.context_memory[context_key] = self.context_memory[context_key][-5:]
-    
-    def get_context_suggestion(self, recent_words: List[str]) -> Optional[str]:
-        if len(recent_words) < self.window_size:
-            return None
-        context_key = tuple(recent_words[-self.window_size:])
-        if context_key in self.context_memory:
-            self.usage_count[context_key] += 1
-            suggestions = self.context_memory[context_key]
-            return max(suggestions, key=lambda x: suggestions.count(x))
-        return None
-    
-    def _cleanup_memory(self) -> None:
-        if len(self.usage_count) > 0:
-            sorted_contexts = sorted(self.usage_count.items(), key=lambda x: x[1])
-            to_remove = len(sorted_contexts) // 5
-            for context_key, _ in sorted_contexts[:to_remove]:
-                if context_key in self.context_memory:
-                    del self.context_memory[context_key]
-                del self.usage_count[context_key]
-
-def clean_text(text: str) -> str:
+def clean_text(text):
     text = text.lower()
     text = re.sub(r'[^\w\s]', '', text)
     return text
 
-def augment_data(conversations: List[Tuple[str, str]]) -> List[Tuple[str, str]]:
+def augment_data(conversations):
     augmented = []
     for q, a in conversations:
         q_clean, a_clean = clean_text(q), clean_text(a)
@@ -259,134 +210,148 @@ def augment_data(conversations: List[Tuple[str, str]]) -> List[Tuple[str, str]]:
     return augmented
 
 conversations = [
-    ("привет", "здравствуй"), ("добрый день", "и вам добрый"),
-    ("пока", "до скорой встречи"), ("кто ты", "я нейросеть"),
-    ("как тебя зовут", "у меня нет имени"),
-    ("что ты умеешь", "я могу отвечать на вопросы"),
-    ("как дела", "все отлично спасибо что спросил"),
-    ("спасибо", "пожалуйста"),
+    ("привет", "здравствуй"), ("добрый день", "и вам добрый"), ("здравствуй", "и тебе привет"),
+    ("пока", "до скорой встречи"), ("до свидания", "всего хорошего"),
+    ("кто ты", "я нейросеть текстовая модель"), ("как тебя зовут", "у меня нет имени"),
+    ("что ты умеешь", "я могу отвечать на простые вопросы"),
+    ("как дела", "все отлично спасибо что спросил"), ("большое спасибо", "не за что"),
+    ("благодарю", "всегда пожалуйста"),
     ("меня зовут", "очень приятно познакомиться")
 ]
 known_questions = [clean_text(q) for q, a in conversations]
-augmented_conversations = augment_data(conversations)
-print(f"Аугментация завершена. Исходных примеров: {len(conversations)}, стало: {len(augmented_conversations)}")
-corpus = [q for q, a in augmented_conversations] + [a for q, a in augmented_conversations]
-tokenizer = BPETokenizer(vocab_size=70)
-tokenizer.train(corpus)
-vocab_size = len(tokenizer.vocab)
-PAD_ID = tokenizer.token_to_id["<pad>"]
+known_words = set(" ".join(known_questions).split())
+max_seq_length = 20
+MODEL_PATH = 'b1tler_gpt_model.pt'
+TOKENIZER_PATH = 'b1tler_gpt_tokenizer.json'
+
+d_model=192
+num_heads=6
+num_layers=4
+d_ff=768
+
+if os.path.exists(MODEL_PATH) and os.path.exists(TOKENIZER_PATH):
+    print("Загрузка сохраненной модели и токенизатора...")
+    tokenizer = BPETokenizer()
+    tokenizer.load(TOKENIZER_PATH)
+    vocab_size = len(tokenizer.vocab)
+    PAD_ID = tokenizer.token_to_id["<pad>"]
+    model = Transformer(vocab_size, d_model, num_heads, num_layers, d_ff, PAD_ID)
+    model.load_state_dict(torch.load(MODEL_PATH))
+    print("Модель успешно загружена.")
+else:
+    print("Сохраненные файлы не найдены. Начинаем новый цикл обучения...")
+    augmented_conversations = augment_data(conversations)
+    print(f"Аугментация завершена. Исходных примеров: {len(conversations)}, стало: {len(augmented_conversations)}")
+    corpus = [q for q, a in augmented_conversations] + [a for q, a in augmented_conversations]
+    tokenizer = BPETokenizer(vocab_size=150)
+    tokenizer.train(corpus)
+    vocab_size = len(tokenizer.vocab)
+    PAD_ID = tokenizer.token_to_id["<pad>"]
+    
+    src_data_list, tgt_data_list, y_labels_list = [], [], []
+    EOS_ID = tokenizer.token_to_id["<eos>"]
+    SOS_ID = tokenizer.token_to_id["<sos>"]
+    for q, a in augmented_conversations:
+        src_tokens = tokenizer.encode(q)
+        tgt_tokens = tokenizer.encode(a)
+        src_data_list.append((src_tokens + [EOS_ID] + [PAD_ID] * max_seq_length)[:max_seq_length])
+        tgt_data_list.append(([SOS_ID] + tgt_tokens + [PAD_ID] * max_seq_length)[:max_seq_length])
+        y_labels_list.append((tgt_tokens + [EOS_ID] + [PAD_ID] * max_seq_length)[:max_seq_length])
+
+    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    src_data = torch.LongTensor(src_data_list).to(device)
+    tgt_data = torch.LongTensor(tgt_data_list).to(device)
+    y_labels = torch.LongTensor(y_labels_list).to(device)
+    
+    learning_rate=0.0001
+    epochs=4000
+    
+    model = Transformer(vocab_size, d_model, num_heads, num_layers, d_ff, PAD_ID).to(device)
+    
+    params_to_train = list(model.embedding.parameters()) + list(model.fc_out.parameters())
+    for layer in model.encoder_layers:
+        params_to_train.extend(list(layer.ff.parameters()))
+    for layer in model.decoder_layers:
+        params_to_train.extend(list(layer.ff.parameters()))
+    
+    optimizer = optim.Adam(params_to_train, lr=learning_rate)
+    criterion = nn.CrossEntropyLoss(ignore_index=PAD_ID)
+    
+    print("Начало обучения на PyTorch (Embedding + FC_Out + FF слои)...")
+    model.train()
+    for epoch in range(epochs):
+        optimizer.zero_grad()
+        output = model(src_data, tgt_data)
+        loss = criterion(output.view(-1, vocab_size), y_labels.view(-1))
+        loss.backward()
+        optimizer.step()
+        if (epoch + 1) % 100 == 0:
+            print(f"Эпоха {epoch+1}/{epochs}, Потери: {loss.item():.4f}")
+    
+    torch.save(model.state_dict(), MODEL_PATH)
+    tokenizer.save(TOKENIZER_PATH)
+    print("Обучение завершено. Модель и токенизатор сохранены.")
+
 SOS_ID = tokenizer.token_to_id["<sos>"]
 EOS_ID = tokenizer.token_to_id["<eos>"]
-max_seq_length = 20
-def pad_sequence(tokens, max_len, pad_id):
-    return (tokens + [pad_id] * max_len)[:max_len]
-src_data_list, tgt_data_list, y_labels_list = [], [], []
-for q, a in augmented_conversations:
-    src_tokens = tokenizer.encode(q)
-    tgt_tokens = tokenizer.encode(a)
-    src_data_list.append(pad_sequence(src_tokens + [EOS_ID], max_seq_length, PAD_ID))
-    tgt_data_list.append(pad_sequence([SOS_ID] + tgt_tokens, max_seq_length, PAD_ID))
-    y_labels_list.append(pad_sequence(tgt_tokens + [EOS_ID], max_seq_length, PAD_ID))
-
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-src_data = torch.LongTensor(src_data_list).to(device)
-tgt_data = torch.LongTensor(tgt_data_list).to(device)
-y_labels = torch.LongTensor(y_labels_list).to(device)
-known_words = set(clean_text(" ".join(corpus)).split())
-
-d_model = 192
-num_heads = 6
-num_layers = 4
-d_ff = 768
-learning_rate = 0.0001
-epochs = 500
-model = Transformer(vocab_size, d_model, num_heads, num_layers, d_ff, PAD_ID).to(device)
-optimizer = optim.Adam(model.parameters(), lr=learning_rate)
-criterion = nn.CrossEntropyLoss(ignore_index=PAD_ID)
-print("Начало обучения на PyTorch...")
-model.train()
-for epoch in range(epochs):
-    optimizer.zero_grad()
-    output = model(src_data, tgt_data)
-    loss = criterion(output.view(-1, vocab_size), y_labels.view(-1))
-    loss.backward()
-    optimizer.step()
-    if (epoch + 1) % 50 == 0:
-        print(f"Эпоха {epoch+1}/{epochs}, Потери: {loss.item():.4f}")
-print("Обучение завершено.")
-
+model.to(device)
 alias_memory = {}
-context_memory_obj = ImprovedContextMemory(max_size=1000, window_size=2)
+context_memory = collections.defaultdict(list)
 
-def _generate_single_response(clean_input: str) -> str:
+def _generate_single_response(clean_input):
     model.eval()
     src_tokens = tokenizer.encode(clean_input)
-    src_tensor = torch.LongTensor([pad_sequence(src_tokens + [EOS_ID], max_seq_length, PAD_ID)]).to(device)
+    src_tensor = torch.LongTensor([(src_tokens + [EOS_ID] + [PAD_ID] * max_seq_length)[:max_seq_length]]).to(device)
     output_ids = [SOS_ID]
-    
     for _ in range(max_seq_length - 1):
         with torch.no_grad():
-            tgt_tensor = torch.LongTensor([pad_sequence(output_ids, max_seq_length, PAD_ID)]).to(device)
+            tgt_tensor = torch.LongTensor([(output_ids + [PAD_ID] * max_seq_length)[:max_seq_length]]).to(device)
             output = model(src_tensor, tgt_tensor)
-            
-            if len(output_ids) -1 >= output.shape[1]:
-                break
-            
-            last_logits = output[0, len(output_ids) - 1, :]
-            
-            recent_ids = output_ids[-context_memory_obj.window_size:]
-            recent_tokens = [tokenizer.id_to_token.get(idx, "") for idx in recent_ids]
-            context_suggestion = context_memory_obj.get_context_suggestion(recent_tokens)
+        
+        last_logits = output[0, len(output_ids) - 1, :]
+        last_word = tokenizer.decode([output_ids[-1]]).strip()
+        
+        if last_word in context_memory and random.random() < 0.7:
+            new_word = random.choice(context_memory[last_word])
+            response = tokenizer.decode(output_ids) + " " + new_word
+            return response.replace("<sos>", "").strip()
 
-            probs = torch.softmax(last_logits, dim=-1)
-
-            if context_suggestion:
-                suggestion_id = tokenizer.token_to_id.get(context_suggestion)
-                if suggestion_id is not None and suggestion_id < len(probs):
-                    probs[suggestion_id] *= 2.0
-                    probs /= probs.sum()
-
-            next_word_id = torch.argmax(probs).item()
-            
-            if next_word_id == EOS_ID or next_word_id == PAD_ID:
-                break
-            
-            output_ids.append(next_word_id)
-
-            if len(output_ids) > 3 and output_ids[-1] == output_ids[-2] == output_ids[-3]:
-                break
-                
+        probs = torch.softmax(last_logits, dim=-1)
+        next_word_id = torch.argmax(probs).item()
+        
+        if next_word_id == EOS_ID:
+            break
+        output_ids.append(next_word_id)
+        
     raw_response = tokenizer.decode(output_ids)
     return raw_response.replace("<sos>", "").strip()
 
-def chat(user_input: str) -> str:
+def chat(user_input):
     clean_input = clean_text(user_input)
+    correction_threshold = 2
+    original_words = clean_input.split()
     
-    words = clean_input.split()
-    for i in range(context_memory_obj.window_size, len(words)):
-        context_words = words[i - context_memory_obj.window_size : i]
-        current_word = words[i]
-        if all(w in known_words for w in context_words) and current_word not in known_words:
-            context_memory_obj.add_context(context_words, current_word)
-            print(f"(Контекстная память: после {tuple(context_words)} может идти '{current_word}')")
-
-    if clean_input in alias_memory:
-        known_phrase = alias_memory[clean_input]
-        print(f"(Память алиасов: '{clean_input}' -> '{known_phrase}')")
-        clean_input = known_phrase
+    normalized_input = " " + clean_input + " "
+    for alias, known_phrase in sorted(alias_memory.items(), key=lambda item: len(item[0]), reverse=True):
+        search_alias = " " + alias + " "
+        if search_alias in normalized_input:
+            print(f"(Память алиасов: '{alias}' -> '{known_phrase}')")
+            normalized_input = normalized_input.replace(search_alias, " " + known_phrase + " ")
+    normalized_input = normalized_input.strip()
 
     found_known_phrases = []
-    remaining_input = " " + clean_input + " "
+    remaining_input = " " + normalized_input + " "
     original_positions = {}
     for phrase in sorted(known_questions, key=len, reverse=True):
         search_phrase = " " + phrase + " "
-        if search_phrase in remaining_input:
-            pos = clean_input.find(phrase)
+        while search_phrase in remaining_input:
+            pos = remaining_input.find(search_phrase)
             original_positions[phrase + str(pos)] = pos
             found_known_phrases.append(phrase)
-            remaining_input = remaining_input.replace(search_phrase, " ", 1)
+            remaining_input = remaining_input.replace(search_phrase, " | ", 1)
     
-    remaining_input = remaining_input.strip()
+    remaining_input = remaining_input.replace("|", " ").strip()
 
     if remaining_input:
         best_match = None
@@ -399,21 +364,31 @@ def chat(user_input: str) -> str:
                 min_dist = dist
                 best_match = item
         
-        correction_threshold = 2
         if min_dist <= correction_threshold:
             print(f"(Думаю, '{remaining_input}' - это опечатка в '{best_match}')")
             corrected_phrase = alias_memory.get(best_match, best_match)
             if corrected_phrase not in found_known_phrases:
+                original_positions[corrected_phrase] = clean_input.find(remaining_input)
                 found_known_phrases.append(corrected_phrase)
-        elif len(found_known_phrases) == 1:
-            alias = remaining_input
-            known_part = found_known_phrases[0]
-            contains_known_words_in_alias = any(word in known_words for word in alias.split())
-            if not contains_known_words_in_alias and alias not in known_questions and alias not in alias_memory:
-                alias_memory[alias] = known_part
-                print(f"(Память алиасов: запомнил '{alias}' -> '{known_part}')")
+        else:
+            if len(found_known_phrases) == 1:
+                alias = remaining_input
+                known_part = found_known_phrases[0]
+                contains_known_words_in_alias = any(word in known_words for word in alias.split())
+                if not contains_known_words_in_alias and alias not in known_questions and alias not in alias_memory:
+                    alias_memory[alias] = known_part
+                    print(f"(Память алиасов: запомнил '{alias}' -> '{known_part}')")
+            else:
+                for i, word in enumerate(original_words):
+                    if word not in known_words and i > 0:
+                        prev_word = original_words[i-1]
+                        if prev_word in known_words and word not in context_memory[prev_word]:
+                            context_memory[prev_word].append(word)
+                            print(f"(Контекстная память: после '{prev_word}' может идти '{word}')")
 
     if not found_known_phrases:
+        if not clean_input:
+            return "Пожалуйста, скажите что-нибудь."
         best_match = None
         min_dist = float('inf')
         for question in known_questions:
@@ -421,19 +396,19 @@ def chat(user_input: str) -> str:
             if dist < min_dist:
                 min_dist = dist
                 best_match = question
-        correction_threshold = 2
         if min_dist <= correction_threshold:
             print(f"(Думаю, вы имели в виду: '{best_match}')")
             found_known_phrases.append(best_match)
         else:
             return _generate_single_response(clean_input)
     
-    responses = [_generate_single_response(phrase) for phrase in found_known_phrases]
+    sorted_phrases = sorted(found_known_phrases, key=lambda p: original_positions.get(p + str(normalized_input.find(p)), -1))
+    responses = [_generate_single_response(phrase) for phrase in sorted_phrases]
     unique_responses = list(dict.fromkeys(responses))
     final_response = ", ".join(unique_responses)
     return final_response.capitalize() if final_response else "Я не совсем понял, можешь перефразировать?"
 
-print("\nМодель с улучшенной контекстной памятью. Попробуйте 'меня зовут [Имя Фамилия]'.")
+print("\nМодель 4.0 с улучшенной логикой. Попробуйте 'привет кто тв' или 'как дела ало'.")
 while True:
     user_message = input("Вы: ")
     if user_message.lower() == 'выход':
