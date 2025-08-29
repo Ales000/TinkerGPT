@@ -232,7 +232,7 @@ max_seq_length = 20
 MODEL_PATH = 'b1tler_gpt_model.pt'
 TOKENIZER_PATH = 'b1tler_gpt_tokenizer.json'
 
-d_model=192
+d_model=212
 num_heads=6
 num_layers=4
 d_ff=768
