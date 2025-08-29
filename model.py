@@ -321,10 +321,12 @@ else:
     augmented_conversations = augment_data(conversations)
     print(f"Аугментация завершена. Исходных примеров: {len(conversations)}, стало: {len(augmented_conversations)}")
     corpus = [q for q, a in augmented_conversations] + [a for q, a in augmented_conversations]
-    tokenizer = BPETokenizer(vocab_size=70)
+    tokenizer = BPETokenizer(vocab_size=150)
     tokenizer.train(corpus)
     vocab_size = len(tokenizer.vocab)
     PAD_ID = tokenizer.token_to_id["<pad>"]
+    SOS_ID = tokenizer.token_to_id["<sos>"]
+    EOS_ID = tokenizer.token_to_id["<eos>"]
     
     src_data_list, tgt_data_list, y_labels_list = [], [], []
     for q, a in augmented_conversations:
