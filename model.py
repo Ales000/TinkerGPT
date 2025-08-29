@@ -323,7 +323,7 @@ else:
     y_labels = torch.LongTensor(y_labels_list).to(device)
     
     learning_rate=0.0001
-    epochs=3000
+    epochs=4000
     
     model = Transformer(vocab_size, d_model, num_heads, num_layers, d_ff, PAD_ID).to(device)
     optimizer = optim.Adam(model.parameters(), lr=learning_rate)
