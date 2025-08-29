@@ -296,8 +296,6 @@ if os.path.exists(MODEL_PATH) and os.path.exists(TOKENIZER_PATH):
     tokenizer.load(TOKENIZER_PATH)
     vocab_size = len(tokenizer.vocab)
     PAD_ID = tokenizer.token_to_id["<pad>"]
-    SOS_ID = tokenizer.token_to_id["<sos>"]
-    EOS_ID = tokenizer.token_to_id["<eos>"]
     model = Transformer(vocab_size, d_model, num_heads, num_layers, d_ff, PAD_ID)
     model.load_state_dict(torch.load(MODEL_PATH))
     print("Модель успешно загружена.")
@@ -310,8 +308,6 @@ else:
     tokenizer.train(corpus)
     vocab_size = len(tokenizer.vocab)
     PAD_ID = tokenizer.token_to_id["<pad>"]
-    SOS_ID = tokenizer.token_to_id["<sos>"]
-    EOS_ID = tokenizer.token_to_id["<eos>"]
     
     src_data_list, tgt_data_list, y_labels_list = [], [], []
     for q, a in augmented_conversations:
@@ -348,6 +344,8 @@ else:
     tokenizer.save(TOKENIZER_PATH)
     print("Обучение завершено. Модель и токенизатор сохранены.")
 
+SOS_ID = tokenizer.token_to_id["<sos>"]
+EOS_ID = tokenizer.token_to_id["<eos>"]
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 model.to(device)
 alias_memory = {}
@@ -384,34 +382,32 @@ def _generate_single_response(clean_input):
 def chat(user_input):
     clean_input = clean_text(user_input)
     correction_threshold = 2
+    original_words = clean_input.split()
     
-    words = clean_input.split()
-    for i, word in enumerate(words):
-        if word not in known_words and i > 0:
-            prev_word = words[i-1]
-            if prev_word in known_words:
-                if word not in context_memory[prev_word]:
-                     context_memory[prev_word].append(word)
-                     print(f"(Контекстная память: после '{prev_word}' может идти '{word}')")
+    # Этап 1: Нормализация с помощью алиасов
+    normalized_input = " " + clean_input + " "
+    for alias, known_phrase in sorted(alias_memory.items(), key=lambda item: len(item[0]), reverse=True):
+        search_alias = " " + alias + " "
+        if search_alias in normalized_input:
+            print(f"(Память алиасов: '{alias}' -> '{known_phrase}')")
+            normalized_input = normalized_input.replace(search_alias, " " + known_phrase + " ")
+    normalized_input = normalized_input.strip()
 
-    if clean_input in alias_memory:
-        known_phrase = alias_memory[clean_input]
-        print(f"(Память алиасов: '{clean_input}' -> '{known_phrase}')")
-        clean_input = known_phrase
-
+    # Этап 2: Декомпозиция
     found_known_phrases = []
-    remaining_input = " " + clean_input + " "
+    remaining_input = " " + normalized_input + " "
     original_positions = {}
     for phrase in sorted(known_questions, key=len, reverse=True):
         search_phrase = " " + phrase + " "
-        if search_phrase in remaining_input:
-            pos = clean_input.find(phrase)
+        while search_phrase in remaining_input:
+            pos = remaining_input.find(search_phrase)
             original_positions[phrase + str(pos)] = pos
             found_known_phrases.append(phrase)
-            remaining_input = remaining_input.replace(search_phrase, " ", 1)
+            remaining_input = remaining_input.replace(search_phrase, " | ", 1)
     
-    remaining_input = remaining_input.strip()
+    remaining_input = remaining_input.replace("|", " ").strip()
 
+    # Этап 3: Анализ остатка и запоминание
     if remaining_input:
         best_match = None
         min_dist = float('inf')
@@ -429,14 +425,23 @@ def chat(user_input):
             if corrected_phrase not in found_known_phrases:
                 original_positions[corrected_phrase] = clean_input.find(remaining_input)
                 found_known_phrases.append(corrected_phrase)
-        elif len(found_known_phrases) == 1:
-            alias = remaining_input
-            known_part = found_known_phrases[0]
-            contains_known_words_in_alias = any(word in known_words for word in alias.split())
-            if not contains_known_words_in_alias and alias not in known_questions and alias not in alias_memory:
-                alias_memory[alias] = known_part
-                print(f"(Память алиасов: запомнил '{alias}' -> '{known_part}')")
+        else:
+            if len(found_known_phrases) == 1:
+                alias = remaining_input
+                known_part = found_known_phrases[0]
+                contains_known_words_in_alias = any(word in known_words for word in alias.split())
+                if not contains_known_words_in_alias and alias not in known_questions and alias not in alias_memory:
+                    alias_memory[alias] = known_part
+                    print(f"(Память алиасов: запомнил '{alias}' -> '{known_part}')")
+            else:
+                for i, word in enumerate(original_words):
+                    if word not in known_words and i > 0:
+                        prev_word = original_words[i-1]
+                        if prev_word in known_words and word not in context_memory[prev_word]:
+                            context_memory[prev_word].append(word)
+                            print(f"(Контекстная память: после '{prev_word}' может идти '{word}')")
 
+    # Этап 4: Финальная проверка
     if not found_known_phrases:
         if not clean_input:
             return "Пожалуйста, скажите что-нибудь."
@@ -453,13 +458,14 @@ def chat(user_input):
         else:
             return _generate_single_response(clean_input)
     
-    sorted_phrases = sorted(found_known_phrases, key=lambda p: original_positions.get(p + str(clean_input.find(p)), -1))
+    # Этап 5: Сборка ответа
+    sorted_phrases = sorted(found_known_phrases, key=lambda p: original_positions.get(p + str(normalized_input.find(p)), -1))
     responses = [_generate_single_response(phrase) for phrase in sorted_phrases]
     unique_responses = list(dict.fromkeys(responses))
     final_response = ", ".join(unique_responses)
     return final_response.capitalize() if final_response else "Я не совсем понял, можешь перефразировать?"
 
-print("\nМодель с двумя видами памяти и сохранением. Попробуйте 'ало привет', затем 'меня зовут [Имя]'.")
+print("\nМодель 4.0 с улучшенной логикой. Попробуйте 'привет кто тв' или 'как дела ало'.")
 while True:
     user_message = input("Вы: ")
     if user_message.lower() == 'выход':
