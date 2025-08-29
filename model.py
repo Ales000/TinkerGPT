@@ -209,15 +209,23 @@ def augment_data(conversations):
                     augmented.append((new_q, a_clean))
     return augmented
 
-conversations = [
-    ("привет", "здравствуй"), ("добрый день", "и вам добрый"), ("здравствуй", "и тебе привет"),
-    ("пока", "до скорой встречи"), ("до свидания", "всего хорошего"),
-    ("кто ты", "я нейросеть текстовая модель"), ("как тебя зовут", "у меня нет имени"),
-    ("что ты умеешь", "я могу отвечать на простые вопросы"),
-    ("как дела", "все отлично спасибо что спросил"), ("большое спасибо", "не за что"),
-    ("благодарю", "всегда пожалуйста"),
-    ("меня зовут", "очень приятно познакомиться")
-]
+def load_conversations_from_json(filepath):
+    try:
+        with open(filepath, 'r', encoding='utf-8') as f:
+            data = json.load(f)
+        conversations = []
+        for item in data:
+            question = item['question']
+            for answer in item['answers']:
+                conversations.append((question, answer))
+        return conversations
+    except FileNotFoundError:
+        print(f"Ошибка: Файл с данными '{filepath}' не найден. Пожалуйста, создайте его.")
+        exit()
+
+DATASET_PATH = 'conversations_dataset.json'
+conversations = load_conversations_from_json(DATASET_PATH)
+
 known_questions = [clean_text(q) for q, a in conversations]
 known_words = set(" ".join(known_questions).split())
 max_seq_length = 20
