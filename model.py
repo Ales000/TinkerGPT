@@ -325,10 +325,10 @@ else:
     tokenizer.train(corpus)
     vocab_size = len(tokenizer.vocab)
     PAD_ID = tokenizer.token_to_id["<pad>"]
-    SOS_ID = tokenizer.token_to_id["<sos>"]
-    EOS_ID = tokenizer.token_to_id["<eos>"]
     
     src_data_list, tgt_data_list, y_labels_list = [], [], []
+    EOS_ID = tokenizer.token_to_id["<eos>"]
+    SOS_ID = tokenizer.token_to_id["<sos>"]
     for q, a in augmented_conversations:
         src_tokens = tokenizer.encode(q)
         tgt_tokens = tokenizer.encode(a)
