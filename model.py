@@ -220,7 +220,7 @@ conversations = [
 ]
 known_questions = [clean_text(q) for q, a in conversations]
 known_words = set(" ".join(known_questions).split())
-max_seq_length = 40
+max_seq_length = 20
 MODEL_PATH = 'b1tler_gpt_model.pt'
 TOKENIZER_PATH = 'b1tler_gpt_tokenizer.json'
 
