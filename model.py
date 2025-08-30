@@ -292,7 +292,7 @@ for layer in model.decoder_layers:
     optimizer = optim.Adam(params_to_train, lr=learning_rate)
     criterion = nn.CrossEntropyLoss(ignore_index=PAD_ID)
     
-    print("Начало обучения на PyTorch (Embedding + FC_Out + FF слои + LayerNorm)...")
+    print("Начало обучения (Embedding + FC_Out + FF слои + LayerNorm)...")
     model.train()
     for epoch in range(epochs):
         optimizer.zero_grad()
