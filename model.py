@@ -82,7 +82,7 @@ class BPETokenizer:
         }
         with open(filepath, 'w', encoding='utf-8') as f:
             json.dump(data, f, ensure_ascii=False, indent=2)
-        print(f"Токенизатор сохранен в {filepath}")
+        print(f"The tokenizer is saved in: {filepath}")
     def load(self, filepath='bpe_tokenizer.json'):
         with open(filepath, 'r', encoding='utf-8') as f:
             data = json.load(f)
@@ -220,7 +220,7 @@ def load_conversations_from_json(filepath):
                 conversations.append((question, answer))
         return conversations
     except FileNotFoundError:
-        print(f"Ошибка: Файл с данными '{filepath}' не найден. Пожалуйста, создайте его.")
+        print(f"Error: Data file '{filepath}' Not found. Please create it and try again.")
         exit()
 
 DATASET_PATH = 'conversations_dataset.json'
@@ -299,7 +299,7 @@ for layer in model.decoder_layers:
         loss.backward()
         optimizer.step()
         if (epoch + 1) % 100 == 0:
-            print(f"Эпоха {epoch+1}/{epochs}, Потери: {loss.item():.4f}")
+            print(f"Epoch: {epoch+1}/{epochs}, Losses: {loss.item():.4f}")
     
     torch.save(model.state_dict(), MODEL_PATH)
     tokenizer.save(TOKENIZER_PATH)
