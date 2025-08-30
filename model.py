@@ -237,6 +237,8 @@ num_heads=6
 num_layers=4
 d_ff=768
 
+# --- ЗАМЕНИТЕ ВЕСЬ БЛОК НА ЭТОТ ---
+
 if os.path.exists(MODEL_PATH) and os.path.exists(TOKENIZER_PATH):
     print("Загрузка сохраненной модели и токенизатора...")
     tokenizer = BPETokenizer()
@@ -246,6 +248,7 @@ if os.path.exists(MODEL_PATH) and os.path.exists(TOKENIZER_PATH):
     model = Transformer(vocab_size, d_model, num_heads, num_layers, d_ff, PAD_ID)
     model.load_state_dict(torch.load(MODEL_PATH))
     print("Модель успешно загружена.")
+    # Обучение не запускаем, просто выходим из блока
 else:
     print("Сохраненные файлы не найдены. Начинаем новый цикл обучения...")
     augmented_conversations = augment_data(conversations)
@@ -275,24 +278,21 @@ else:
     epochs=4000
     
     model = Transformer(vocab_size, d_model, num_heads, num_layers, d_ff, PAD_ID).to(device)
-    
     params_to_train = list(model.embedding.parameters()) + list(model.fc_out.parameters())
-for layer in model.encoder_layers:
-    params_to_train.extend(list(layer.ff.parameters()))
-    #  параметры из двух LayerNorm в EncoderLayer
-    params_to_train.extend(list(layer.norm1.parameters()))
-    params_to_train.extend(list(layer.norm2.parameters()))
-for layer in model.decoder_layers:
-    params_to_train.extend(list(layer.ff.parameters()))
-    # параметры из трех LayerNorm в DecoderLayer
-    params_to_train.extend(list(layer.norm1.parameters()))
-    params_to_train.extend(list(layer.norm2.parameters()))
-    params_to_train.extend(list(layer.norm3.parameters()))
+    for layer in model.encoder_layers:
+        params_to_train.extend(list(layer.ff.parameters()))
+        params_to_train.extend(list(layer.norm1.parameters()))
+        params_to_train.extend(list(layer.norm2.parameters()))
+    for layer in model.decoder_layers:
+        params_to_train.extend(list(layer.ff.parameters()))
+        params_to_train.extend(list(layer.norm1.parameters()))
+        params_to_train.extend(list(layer.norm2.parameters()))
+        params_to_train.extend(list(layer.norm3.parameters()))
     
     optimizer = optim.Adam(params_to_train, lr=learning_rate)
     criterion = nn.CrossEntropyLoss(ignore_index=PAD_ID)
     
-    print("Начало обучения (Embedding + FC_Out + FF слои + LayerNorm)...")
+    print("Начало обучения на PyTorch (Embedding + FC_Out + FF слои + LayerNorm)...")
     model.train()
     for epoch in range(epochs):
         optimizer.zero_grad()
