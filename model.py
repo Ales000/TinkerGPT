@@ -229,8 +229,8 @@ conversations = load_conversations_from_json(DATASET_PATH)
 known_questions = [clean_text(q) for q, a in conversations]
 known_words = set(" ".join(known_questions).split())
 max_seq_length = 20
-MODEL_PATH = 'b1tler_gpt_model.pt'
-TOKENIZER_PATH = 'b1tler_gpt_tokenizer.json'
+MODEL_PATH = 'tinker_gpt_model.pt'
+TOKENIZER_PATH = 'tinker_gpt_tokenizer.json'
 
 d_model=192
 num_heads=6
@@ -238,18 +238,18 @@ num_layers=4
 d_ff=768
 
 if os.path.exists(MODEL_PATH) and os.path.exists(TOKENIZER_PATH):
-    print("Загрузка сохраненной модели и токенизатора...")
+    print("Loading the model and tokenizer...")
     tokenizer = BPETokenizer()
     tokenizer.load(TOKENIZER_PATH)
     vocab_size = len(tokenizer.vocab)
     PAD_ID = tokenizer.token_to_id["<pad>"]
     model = Transformer(vocab_size, d_model, num_heads, num_layers, d_ff, PAD_ID)
     model.load_state_dict(torch.load(MODEL_PATH))
-    print("Модель успешно загружена.")
+    print("The model has been loaded successfully.")
 else:
-    print("Сохраненные файлы не найдены. Начинаем новый цикл обучения...")
+    print("The saved files were not found. starting a new learning cycle...")
     augmented_conversations = augment_data(conversations)
-    print(f"Аугментация завершена. Исходных примеров: {len(conversations)}, стало: {len(augmented_conversations)}")
+    print(f"The documentation is completed. The data used to be: {len(conversations)}, The data is now: {len(augmented_conversations)}")
     corpus = [q for q, a in augmented_conversations] + [a for q, a in augmented_conversations]
     tokenizer = BPETokenizer(vocab_size=150)
     tokenizer.train(corpus)
@@ -279,12 +279,10 @@ else:
     params_to_train = list(model.embedding.parameters()) + list(model.fc_out.parameters())
 for layer in model.encoder_layers:
     params_to_train.extend(list(layer.ff.parameters()))
-    #  параметры из двух LayerNorm в EncoderLayer
     params_to_train.extend(list(layer.norm1.parameters()))
     params_to_train.extend(list(layer.norm2.parameters()))
 for layer in model.decoder_layers:
-    params_to_train.extend(list(layer.ff.parameters()))
-    # параметры из трех LayerNorm в DecoderLayer
+    params_to_train.extend(list(layer.ff.parameters())) 
     params_to_train.extend(list(layer.norm1.parameters()))
     params_to_train.extend(list(layer.norm2.parameters()))
     params_to_train.extend(list(layer.norm3.parameters()))
@@ -292,7 +290,7 @@ for layer in model.decoder_layers:
     optimizer = optim.Adam(params_to_train, lr=learning_rate)
     criterion = nn.CrossEntropyLoss(ignore_index=PAD_ID)
     
-    print("Начало обучения на PyTorch (Embedding + FC_Out + FF слои + LayerNorm)...")
+    print("The beginning of training...")
     model.train()
     for epoch in range(epochs):
         optimizer.zero_grad()
@@ -305,7 +303,7 @@ for layer in model.decoder_layers:
     
     torch.save(model.state_dict(), MODEL_PATH)
     tokenizer.save(TOKENIZER_PATH)
-    print("Обучение завершено. Модель и токенизатор сохранены.")
+    print("the training is completed. The model and tokenizer are saved ")
 
 SOS_ID = tokenizer.token_to_id["<sos>"]
 EOS_ID = tokenizer.token_to_id["<eos>"]
@@ -351,7 +349,7 @@ def chat(user_input):
     for alias, known_phrase in sorted(alias_memory.items(), key=lambda item: len(item[0]), reverse=True):
         search_alias = " " + alias + " "
         if search_alias in normalized_input:
-            print(f"(Память алиасов: '{alias}' -> '{known_phrase}')")
+            print(f"(Memory of aliases: '{alias}' -> '{known_phrase}')")
             normalized_input = normalized_input.replace(search_alias, " " + known_phrase + " ")
     normalized_input = normalized_input.strip()
 
@@ -380,7 +378,7 @@ def chat(user_input):
                 best_match = item
         
         if min_dist <= correction_threshold:
-            print(f"(Думаю, '{remaining_input}' - это опечатка в '{best_match}')")
+            print(f"(I think, '{remaining_input}' - This is a typo in '{best_match}')")
             corrected_phrase = alias_memory.get(best_match, best_match)
             if corrected_phrase not in found_known_phrases:
                 original_positions[corrected_phrase] = clean_input.find(remaining_input)
@@ -392,18 +390,18 @@ def chat(user_input):
                 contains_known_words_in_alias = any(word in known_words for word in alias.split())
                 if not contains_known_words_in_alias and alias not in known_questions and alias not in alias_memory:
                     alias_memory[alias] = known_part
-                    print(f"(Память алиасов: запомнил '{alias}' -> '{known_part}')")
+                    print(f"(Alias Memory. I remember: '{alias}' -> '{known_part}')")
             else:
                 for i, word in enumerate(original_words):
                     if word not in known_words and i > 0:
                         prev_word = original_words[i-1]
                         if prev_word in known_words and word not in context_memory[prev_word]:
                             context_memory[prev_word].append(word)
-                            print(f"(Контекстная память: после '{prev_word}' может идти '{word}')")
+                            print(f"(Contextual Memory: After '{prev_word}' May be '{word}')")
 
-    if not found_known_phrases:
+    if not found_known_phrases:Alias Memory
         if not clean_input:
-            return "Пожалуйста, скажите что-нибудь."
+            return "Please say something"
         best_match = None
         min_dist = float('inf')
         for question in known_questions:
@@ -412,7 +410,7 @@ def chat(user_input):
                 min_dist = dist
                 best_match = question
         if min_dist <= correction_threshold:
-            print(f"(Думаю, вы имели в виду: '{best_match}')")
+            print(f"(I think you meant : '{best_match}')")
             found_known_phrases.append(best_match)
         else:
             return _generate_single_response(clean_input)
@@ -421,12 +419,12 @@ def chat(user_input):
     responses = [_generate_single_response(phrase) for phrase in sorted_phrases]
     unique_responses = list(dict.fromkeys(responses))
     final_response = ", ".join(unique_responses)
-    return final_response.capitalize() if final_response else "Я не совсем понял, можешь перефразировать?"
+    return final_response.capitalize() if final_response else "I didn't quite get it. Can you rephrase that?"
 
-print("\nМодель 4.0 с улучшенной логикой. Попробуйте 'привет кто тв' или 'как дела ало'.")
+print("\nTinker-GPT 1.0")
 while True:
-    user_message = input("Вы: ")
-    if user_message.lower() == 'выход':
+    user_message = input("You: ")
+    if user_message.lower() == 'Exit':
         break
     response = chat(user_message)
-    print(f"B1TLER-GPT: {response}")
+    print(f"Tinker-GPT: {response}")
