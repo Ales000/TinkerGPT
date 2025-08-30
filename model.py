@@ -228,7 +228,7 @@ conversations = load_conversations_from_json(DATASET_PATH)
 
 known_questions = [clean_text(q) for q, a in conversations]
 known_words = set(" ".join(known_questions).split())
-max_seq_length = 20
+max_seq_length = 30
 MODEL_PATH = 'tinker_gpt_model.pt'
 TOKENIZER_PATH = 'tinker_gpt_tokenizer.json'
 
