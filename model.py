@@ -64,7 +64,7 @@ class BPETokenizer:
         self.token_to_id = {token: i for i, token in enumerate(self.vocab)}
         self.id_to_token = {i: token for i, token in enumerate(self.vocab)}
         self.unk_id = self.token_to_id["<unk>"]
-        print(f"BPE токенизатор обучен. Размер словаря: {len(self.vocab)}")
+        print(f"The BPE tokenizer is trained. Vocab Size: {len(self.vocab)}")
     def encode(self, text):
         pre_tokenized_words = [' '.join(list(word)) + ' </w>' for word in text.strip().split()]
         for pair, _ in sorted(self.merges.items(), key=lambda x: x[1]):
@@ -91,7 +91,7 @@ class BPETokenizer:
         self.token_to_id = {token: i for i, token in enumerate(self.vocab)}
         self.id_to_token = {i: token for i, token in enumerate(self.vocab)}
         self.unk_id = self.token_to_id["<unk>"]
-        print(f"Токенизатор загружен из {filepath}. Размер словаря: {len(self.vocab)}")
+        print(f"The tokenizer is loaded from: {filepath}. Vocab Size:: {len(self.vocab)}")
 
 class MultiHeadAttention(nn.Module):
     def __init__(self, d_model, num_heads):
