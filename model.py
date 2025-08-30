@@ -64,7 +64,7 @@ class BPETokenizer:
         self.token_to_id = {token: i for i, token in enumerate(self.vocab)}
         self.id_to_token = {i: token for i, token in enumerate(self.vocab)}
         self.unk_id = self.token_to_id["<unk>"]
-        print(f"The BPE tokenizer is trained. Vocab Size: {len(self.vocab)}")
+        print(f"BPE токенизатор обучен. Размер словаря: {len(self.vocab)}")
     def encode(self, text):
         pre_tokenized_words = [' '.join(list(word)) + ' </w>' for word in text.strip().split()]
         for pair, _ in sorted(self.merges.items(), key=lambda x: x[1]):
@@ -82,7 +82,7 @@ class BPETokenizer:
         }
         with open(filepath, 'w', encoding='utf-8') as f:
             json.dump(data, f, ensure_ascii=False, indent=2)
-        print(f"The tokenizer is saved in: {filepath}")
+        print(f"Токенизатор сохранен в {filepath}")
     def load(self, filepath='bpe_tokenizer.json'):
         with open(filepath, 'r', encoding='utf-8') as f:
             data = json.load(f)
@@ -91,7 +91,7 @@ class BPETokenizer:
         self.token_to_id = {token: i for i, token in enumerate(self.vocab)}
         self.id_to_token = {i: token for i, token in enumerate(self.vocab)}
         self.unk_id = self.token_to_id["<unk>"]
-        print(f"The tokenizer is loaded from: {filepath}. Vocab Size:: {len(self.vocab)}")
+        print(f"Токенизатор загружен из {filepath}. Размер словаря: {len(self.vocab)}")
 
 class MultiHeadAttention(nn.Module):
     def __init__(self, d_model, num_heads):
@@ -220,7 +220,7 @@ def load_conversations_from_json(filepath):
                 conversations.append((question, answer))
         return conversations
     except FileNotFoundError:
-        print(f"Error: Data file '{filepath}' Not found. Please create it and try again.")
+        print(f"Ошибка: Файл с данными '{filepath}' не найден. Пожалуйста, создайте его.")
         exit()
 
 DATASET_PATH = 'conversations_dataset.json'
@@ -238,18 +238,18 @@ num_layers=4
 d_ff=768
 
 if os.path.exists(MODEL_PATH) and os.path.exists(TOKENIZER_PATH):
-    print("Loading the model and tokenizer...")
+    print("Загрузка сохраненной модели и токенизатора...")
     tokenizer = BPETokenizer()
     tokenizer.load(TOKENIZER_PATH)
     vocab_size = len(tokenizer.vocab)
     PAD_ID = tokenizer.token_to_id["<pad>"]
     model = Transformer(vocab_size, d_model, num_heads, num_layers, d_ff, PAD_ID)
     model.load_state_dict(torch.load(MODEL_PATH))
-    print("The model has been loaded successfully.")
+    print("Модель успешно загружена.")
 else:
-    print("The saved files were not found. starting a new learning cycle...")
+    print("Сохраненные файлы не найдены. Начинаем новый цикл обучения...")
     augmented_conversations = augment_data(conversations)
-    print(f"The documentation is completed. The data used to be: {len(conversations)}, The data is now: {len(augmented_conversations)}")
+    print(f"Аугментация завершена. Исходных примеров: {len(conversations)}, стало: {len(augmented_conversations)}")
     corpus = [q for q, a in augmented_conversations] + [a for q, a in augmented_conversations]
     tokenizer = BPETokenizer(vocab_size=150)
     tokenizer.train(corpus)
@@ -279,10 +279,12 @@ else:
     params_to_train = list(model.embedding.parameters()) + list(model.fc_out.parameters())
 for layer in model.encoder_layers:
     params_to_train.extend(list(layer.ff.parameters()))
+    #  параметры из двух LayerNorm в EncoderLayer
     params_to_train.extend(list(layer.norm1.parameters()))
     params_to_train.extend(list(layer.norm2.parameters()))
 for layer in model.decoder_layers:
-    params_to_train.extend(list(layer.ff.parameters())) 
+    params_to_train.extend(list(layer.ff.parameters()))
+    # параметры из трех LayerNorm в DecoderLayer
     params_to_train.extend(list(layer.norm1.parameters()))
     params_to_train.extend(list(layer.norm2.parameters()))
     params_to_train.extend(list(layer.norm3.parameters()))
@@ -290,7 +292,7 @@ for layer in model.decoder_layers:
     optimizer = optim.Adam(params_to_train, lr=learning_rate)
     criterion = nn.CrossEntropyLoss(ignore_index=PAD_ID)
     
-    print("The beginning of training...")
+    print("Начало обучения на PyTorch (Embedding + FC_Out + FF слои + LayerNorm)...")
     model.train()
     for epoch in range(epochs):
         optimizer.zero_grad()
@@ -299,11 +301,11 @@ for layer in model.decoder_layers:
         loss.backward()
         optimizer.step()
         if (epoch + 1) % 100 == 0:
-            print(f"Epoch: {epoch+1}/{epochs}, Losses: {loss.item():.4f}")
+            print(f"Эпоха {epoch+1}/{epochs}, Потери: {loss.item():.4f}")
     
     torch.save(model.state_dict(), MODEL_PATH)
     tokenizer.save(TOKENIZER_PATH)
-    print("the training is completed. The model and tokenizer are saved ")
+    print("Обучение завершено. Модель и токенизатор сохранены.")
 
 SOS_ID = tokenizer.token_to_id["<sos>"]
 EOS_ID = tokenizer.token_to_id["<eos>"]
@@ -349,7 +351,7 @@ def chat(user_input):
     for alias, known_phrase in sorted(alias_memory.items(), key=lambda item: len(item[0]), reverse=True):
         search_alias = " " + alias + " "
         if search_alias in normalized_input:
-            print(f"(Memory of aliases: '{alias}' -> '{known_phrase}')")
+            print(f"(Память алиасов: '{alias}' -> '{known_phrase}')")
             normalized_input = normalized_input.replace(search_alias, " " + known_phrase + " ")
     normalized_input = normalized_input.strip()
 
@@ -378,7 +380,7 @@ def chat(user_input):
                 best_match = item
         
         if min_dist <= correction_threshold:
-            print(f"(I think, '{remaining_input}' - This is a typo in '{best_match}')")
+            print(f"(Думаю, '{remaining_input}' - это опечатка в '{best_match}')")
             corrected_phrase = alias_memory.get(best_match, best_match)
             if corrected_phrase not in found_known_phrases:
                 original_positions[corrected_phrase] = clean_input.find(remaining_input)
@@ -390,18 +392,18 @@ def chat(user_input):
                 contains_known_words_in_alias = any(word in known_words for word in alias.split())
                 if not contains_known_words_in_alias and alias not in known_questions and alias not in alias_memory:
                     alias_memory[alias] = known_part
-                    print(f"(Alias Memory. I remember: '{alias}' -> '{known_part}')")
+                    print(f"(Память алиасов: запомнил '{alias}' -> '{known_part}')")
             else:
                 for i, word in enumerate(original_words):
                     if word not in known_words and i > 0:
                         prev_word = original_words[i-1]
                         if prev_word in known_words and word not in context_memory[prev_word]:
                             context_memory[prev_word].append(word)
-                            print(f"(Contextual Memory: After '{prev_word}' May be '{word}')")
+                            print(f"(Контекстная память: после '{prev_word}' может идти '{word}')")
 
-    if not found_known_phrases:Alias Memory
+    if not found_known_phrases:
         if not clean_input:
-            return "Please say something"
+            return "Пожалуйста, скажите что-нибудь."
         best_match = None
         min_dist = float('inf')
         for question in known_questions:
@@ -410,7 +412,7 @@ def chat(user_input):
                 min_dist = dist
                 best_match = question
         if min_dist <= correction_threshold:
-            print(f"(I think you meant : '{best_match}')")
+            print(f"(Думаю, вы имели в виду: '{best_match}')")
             found_known_phrases.append(best_match)
         else:
             return _generate_single_response(clean_input)
@@ -419,12 +421,12 @@ def chat(user_input):
     responses = [_generate_single_response(phrase) for phrase in sorted_phrases]
     unique_responses = list(dict.fromkeys(responses))
     final_response = ", ".join(unique_responses)
-    return final_response.capitalize() if final_response else "I didn't quite get it. Can you rephrase that?"
+    return final_response.capitalize() if final_response else "Я не совсем понял, можешь перефразировать?"
 
-print("\nTinker-GPT 1.0")
+print("\nTinkerGPT 1.0")
 while True:
-    user_message = input("You: ")
-    if user_message.lower() == 'Exit':
+    user_message = input("Вы: ")
+    if user_message.lower() == 'выход':
         break
     response = chat(user_message)
-    print(f"Tinker-GPT: {response}")
+    print(f"TinkerGPT: {response}")
