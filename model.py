@@ -237,8 +237,6 @@ num_heads=6
 num_layers=4
 d_ff=768
 
-# --- ЗАМЕНИТЕ ВЕСЬ БЛОК НА ЭТОТ ---
-
 if os.path.exists(MODEL_PATH) and os.path.exists(TOKENIZER_PATH):
     print("Загрузка сохраненной модели и токенизатора...")
     tokenizer = BPETokenizer()
@@ -275,7 +273,7 @@ else:
     y_labels = torch.LongTensor(y_labels_list).to(device)
     
     learning_rate=0.0001
-    epochs=4000
+    epochs=2500
     
     model = Transformer(vocab_size, d_model, num_heads, num_layers, d_ff, PAD_ID).to(device)
     params_to_train = list(model.embedding.parameters()) + list(model.fc_out.parameters())
