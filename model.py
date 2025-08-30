@@ -277,10 +277,17 @@ else:
     model = Transformer(vocab_size, d_model, num_heads, num_layers, d_ff, PAD_ID).to(device)
     
     params_to_train = list(model.embedding.parameters()) + list(model.fc_out.parameters())
-    for layer in model.encoder_layers:
-        params_to_train.extend(list(layer.ff.parameters()))
-    for layer in model.decoder_layers:
-        params_to_train.extend(list(layer.ff.parameters()))
+for layer in model.encoder_layers:
+    params_to_train.extend(list(layer.ff.parameters()))
+    #  параметры из двух LayerNorm в EncoderLayer
+    params_to_train.extend(list(layer.norm1.parameters()))
+    params_to_train.extend(list(layer.norm2.parameters()))
+for layer in model.decoder_layers:
+    params_to_train.extend(list(layer.ff.parameters()))
+    # параметры из трех LayerNorm в DecoderLayer
+    params_to_train.extend(list(layer.norm1.parameters()))
+    params_to_train.extend(list(layer.norm2.parameters()))
+    params_to_train.extend(list(layer.norm3.parameters()))
     
     optimizer = optim.Adam(params_to_train, lr=learning_rate)
     criterion = nn.CrossEntropyLoss(ignore_index=PAD_ID)
