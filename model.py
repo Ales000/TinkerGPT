@@ -138,41 +138,54 @@ class PositionalEncoding(nn.Module):
         return x + self.pe[:, :x.size(1)]
 
 class EncoderLayer(nn.Module):
-    def __init__(self, d_model, num_heads, d_ff):
-        super().__init__()
-        self.norm1 = nn.LayerNorm(d_model)
-        self.norm2 = nn.LayerNorm(d_model)
-        self.attn = MultiHeadAttention(d_model, num_heads)
-        self.ff = PositionWiseFeedForward(d_model, d_ff)
-    def forward(self, x, mask):
-        x = x + self.attn(self.norm1(x), self.norm1(x), self.norm1(x), mask)
-        x = x + self.ff(self.norm2(x))
-        return x
+    def __init__(self, d_model, num_heads, d_ff, dropout_rate=0.1):
+    super().__init__()
+    self.norm1 = nn.LayerNorm(d_model)
+    self.norm2 = nn.LayerNorm(d_model)
+    self.attn = MultiHeadAttention(d_model, num_heads)
+    self.ff = PositionWiseFeedForward(d_model, d_ff)
+    self.dropout = nn.Dropout(dropout_rate)
+    # Pre-LN
+def forward(self, x, mask):
+    x_norm = self.norm1(x)
+    x = x + self.dropout(self.attn(x_norm, x_norm, x_norm, mask))
+    
+    x_norm = self.norm2(x)
+    x = x + self.dropout(self.ff(x_norm))
+    return x
 
 class DecoderLayer(nn.Module):
-    def __init__(self, d_model, num_heads, d_ff):
-        super().__init__()
-        self.norm1 = nn.LayerNorm(d_model)
-        self.norm2 = nn.LayerNorm(d_model)
-        self.norm3 = nn.LayerNorm(d_model)
-        self.attn = MultiHeadAttention(d_model, num_heads)
-        self.cross_attn = MultiHeadAttention(d_model, num_heads)
-        self.ff = PositionWiseFeedForward(d_model, d_ff)
-    def forward(self, x, enc_output, src_mask, tgt_mask):
-        x = x + self.attn(self.norm1(x), self.norm1(x), self.norm1(x), tgt_mask)
-        x = x + self.cross_attn(self.norm2(x), enc_output, enc_output, src_mask)
-        x = x + self.ff(self.norm3(x))
-        return x
+    def __init__(self, d_model, num_heads, d_ff, dropout_rate=0.1):
+super().__init__()
+self.norm1 = nn.LayerNorm(d_model)
+self.norm2 = nn.LayerNorm(d_model)
+self.norm3 = nn.LayerNorm(d_model)
+self.attn = MultiHeadAttention(d_model, num_heads)
+self.cross_attn = MultiHeadAttention(d_model, num_heads)
+self.ff = PositionWiseFeedForward(d_model, d_ff)
+self.dropout = nn.Dropout(dropout_rate)
+    # Pre-LN
+def forward(self, x, enc_output, src_mask, tgt_mask):
+    x_norm = self.norm1(x)
+    x = x + self.dropout(self.attn(x_norm, x_norm, x_norm, tgt_mask))
+    
+    x_norm = self.norm2(x)
+    x = x + self.dropout(self.cross_attn(x_norm, enc_output, enc_output, src_mask))
+    
+    x_norm = self.norm3(x)
+    x = x + self.dropout(self.ff(x_norm))
+    return x
 
 class Transformer(nn.Module):
-    def __init__(self, vocab_size, d_model, num_heads, num_layers, d_ff, pad_id):
-        super().__init__()
-        self.pad_id = pad_id
-        self.embedding = nn.Embedding(vocab_size, d_model)
-        self.pos_encoder = PositionalEncoding(d_model)
-        self.encoder_layers = nn.ModuleList([EncoderLayer(d_model, num_heads, d_ff) for _ in range(num_layers)])
-        self.decoder_layers = nn.ModuleList([DecoderLayer(d_model, num_heads, d_ff) for _ in range(num_layers)])
-        self.fc_out = nn.Linear(d_model, vocab_size)
+    def __init__(self, vocab_size, d_model, num_heads, num_layers, d_ff, pad_id, dropout_rate=0.1):
+    super().__init__()
+    self.pad_id = pad_id
+    self.embedding = nn.Embedding(vocab_size, d_model)
+    self.pos_encoder = PositionalEncoding(d_model)
+    self.encoder_layers = nn.ModuleList([EncoderLayer(d_model, num_heads, d_ff, dropout_rate) for _ in range(num_layers)])
+    self.decoder_layers = nn.ModuleList([DecoderLayer(d_model, num_heads, d_ff, dropout_rate) for _ in range(num_layers)])
+    self.fc_out = nn.Linear(d_model, vocab_size)
+    self.dropout = nn.Dropout(dropout_rate)
     def make_src_mask(self, src):
         return (src != self.pad_id).unsqueeze(1).unsqueeze(2)
     def make_tgt_mask(self, tgt):
@@ -181,15 +194,21 @@ class Transformer(nn.Module):
         seq_mask = torch.tril(torch.ones((seq_len, seq_len), device=tgt.device)).bool()
         return pad_mask & seq_mask
     def forward(self, src, tgt):
-        src_mask = self.make_src_mask(src)
-        tgt_mask = self.make_tgt_mask(tgt)
-        src = self.pos_encoder(self.embedding(src))
-        tgt = self.pos_encoder(self.embedding(tgt))
-        for layer in self.encoder_layers:
-            src = layer(src, src_mask)
-        for layer in self.decoder_layers:
-            tgt = layer(tgt, src, src_mask, tgt_mask)
-        return self.fc_out(tgt)
+    src_mask = self.make_src_mask(src)
+    tgt_mask = self.make_tgt_mask(tgt)
+    
+    src_embedded = self.dropout(self.pos_encoder(self.embedding(src)))
+    tgt_embedded = self.dropout(self.pos_encoder(self.embedding(tgt)))
+    
+    enc_output = src_embedded
+    for layer in self.encoder_layers:
+        enc_output = layer(enc_output, src_mask)
+        
+    dec_output = tgt_embedded
+    for layer in self.decoder_layers:
+        dec_output = layer(dec_output, enc_output, src_mask, tgt_mask)
+        
+    return self.fc_out(dec_output)
 
 def clean_text(text):
     text = text.lower()
@@ -274,8 +293,9 @@ else:
     
     learning_rate=0.0001
     epochs=2500
+    dropout_rate = 0.1
     
-    model = Transformer(vocab_size, d_model, num_heads, num_layers, d_ff, PAD_ID).to(device)
+    model = Transformer(vocab_size, d_model, num_heads, num_layers, d_ff, PAD_ID, dropout_rate).to(device)
     params_to_train = list(model.embedding.parameters()) + list(model.fc_out.parameters())
     for layer in model.encoder_layers:
         params_to_train.extend(list(layer.ff.parameters()))
