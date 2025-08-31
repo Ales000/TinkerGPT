@@ -147,12 +147,12 @@ class EncoderLayer(nn.Module):
         self.dropout = nn.Dropout(dropout_rate)
     # Pre-LN
     def forward(self, x, mask):
-        x_norm = self.norm1(x)
-        x = x + self.dropout(self.attn(x_norm, x_norm, x_norm, mask))
+    x_norm = self.norm1(x)
+    x = x + self.dropout(self.attn(x_norm, x_norm, x_norm, mask))
     
-        x_norm = self.norm2(x)
-        x = x + self.dropout(self.ff(x_norm))
-        return x
+    x_norm = self.norm2(x)
+    x = x + self.dropout(self.ff(x_norm))
+    return x
 
 class DecoderLayer(nn.Module):
     def __init__(self, d_model, num_heads, d_ff, dropout_rate=0.1):
@@ -166,15 +166,15 @@ class DecoderLayer(nn.Module):
         self.dropout = nn.Dropout(dropout_rate)
     # Pre-LN
     def forward(self, x, enc_output, src_mask, tgt_mask):
-        x_norm = self.norm1(x)
-        x = x + self.dropout(self.attn(x_norm, x_norm, x_norm, tgt_mask))
+    x_norm = self.norm1(x)
+    x = x + self.dropout(self.attn(x_norm, x_norm, x_norm, tgt_mask))
     
-        x_norm = self.norm2(x)
-        x = x + self.dropout(self.cross_attn(x_norm, enc_output, enc_output, src_mask))
+    x_norm = self.norm2(x)
+    x = x + self.dropout(self.cross_attn(x_norm, enc_output, enc_output, src_mask))
     
-        x_norm = self.norm3(x)
-        x = x + self.dropout(self.ff(x_norm))
-        return x
+    x_norm = self.norm3(x)
+    x = x + self.dropout(self.ff(x_norm))
+    return x
 
 class Transformer(nn.Module):
     def __init__(self, vocab_size, d_model, num_heads, num_layers, d_ff, pad_id, dropout_rate=0.1):
@@ -201,12 +201,13 @@ class Transformer(nn.Module):
         tgt_embedded = self.dropout(self.pos_encoder(self.embedding(tgt)))
     
         enc_output = src_embedded
-    for layer in self.encoder_layers:
-        enc_output = layer(enc_output, src_mask)
+        for layer in self.encoder_layers:
+            enc_output = layer(enc_output, src_mask)
         
         dec_output = tgt_embedded
-    for layer in self.decoder_layers:
-        dec_output = layer(dec_output, enc_output, src_mask, tgt_mask)
+        for layer in self.decoder_layers:
+            dec_output = layer(dec_output, enc_output, src_mask, tgt_mask)
+        
         return self.fc_out(dec_output)
 
 def clean_text(text):
