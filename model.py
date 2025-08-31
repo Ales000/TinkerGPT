@@ -200,7 +200,7 @@ class Transformer(nn.Module):
         src_embedded = self.dropout(self.pos_encoder(self.embedding(src)))
         tgt_embedded = self.dropout(self.pos_encoder(self.embedding(tgt)))
     
-    enc_output = src_embedded
+        enc_output = src_embedded
     for layer in self.encoder_layers:
         enc_output = layer(enc_output, src_mask)
         
@@ -208,7 +208,7 @@ class Transformer(nn.Module):
     for layer in self.decoder_layers:
         dec_output = layer(dec_output, enc_output, src_mask, tgt_mask)
         
-    return self.fc_out(dec_output)
+        return self.fc_out(dec_output)
 
 def clean_text(text):
     text = text.lower()
