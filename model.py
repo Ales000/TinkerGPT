@@ -139,12 +139,13 @@ class PositionalEncoding(nn.Module):
 
 class EncoderLayer(nn.Module):
     def __init__(self, d_model, num_heads, d_ff, dropout_rate=0.1):
-    super().__init__()
-    self.norm1 = nn.LayerNorm(d_model)
-    self.norm2 = nn.LayerNorm(d_model)
-    self.attn = MultiHeadAttention(d_model, num_heads)
-    self.ff = PositionWiseFeedForward(d_model, d_ff)
-    self.dropout = nn.Dropout(dropout_rate)
+        super().__init__()  
+        self.norm1 = nn.LayerNorm(d_model)
+        self.norm1 = nn.LayerNorm(d_model)
+        self.norm2 = nn.LayerNorm(d_model)
+        self.attn = MultiHeadAttention(d_model, num_heads)
+        self.ff = PositionWiseFeedForward(d_model, d_ff)
+        self.dropout = nn.Dropout(dropout_rate)
     # Pre-LN
 def forward(self, x, mask):
     x_norm = self.norm1(x)
@@ -156,14 +157,14 @@ def forward(self, x, mask):
 
 class DecoderLayer(nn.Module):
     def __init__(self, d_model, num_heads, d_ff, dropout_rate=0.1):
-super().__init__()
-self.norm1 = nn.LayerNorm(d_model)
-self.norm2 = nn.LayerNorm(d_model)
-self.norm3 = nn.LayerNorm(d_model)
-self.attn = MultiHeadAttention(d_model, num_heads)
-self.cross_attn = MultiHeadAttention(d_model, num_heads)
-self.ff = PositionWiseFeedForward(d_model, d_ff)
-self.dropout = nn.Dropout(dropout_rate)
+        super().__init__()
+        self.norm1 = nn.LayerNorm(d_model)
+        self.norm2 = nn.LayerNorm(d_model)
+        self.norm3 = nn.LayerNorm(d_model)
+        self.attn = MultiHeadAttention(d_model, num_heads)
+        self.cross_attn = MultiHeadAttention(d_model, num_heads)
+        self.ff = PositionWiseFeedForward(d_model, d_ff)
+        self.dropout = nn.Dropout(dropout_rate)
     # Pre-LN
 def forward(self, x, enc_output, src_mask, tgt_mask):
     x_norm = self.norm1(x)
