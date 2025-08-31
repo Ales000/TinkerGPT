@@ -139,53 +139,53 @@ class PositionalEncoding(nn.Module):
 
 class EncoderLayer(nn.Module):
     def __init__(self, d_model, num_heads, d_ff, dropout_rate=0.1):
-    super().__init__()
-    self.norm1 = nn.LayerNorm(d_model)
-    self.norm2 = nn.LayerNorm(d_model)
-    self.attn = MultiHeadAttention(d_model, num_heads)
-    self.ff = PositionWiseFeedForward(d_model, d_ff)
-    self.dropout = nn.Dropout(dropout_rate)
+        super().__init__()
+        self.norm1 = nn.LayerNorm(d_model)
+        self.norm2 = nn.LayerNorm(d_model)
+        self.attn = MultiHeadAttention(d_model, num_heads)
+        self.ff = PositionWiseFeedForward(d_model, d_ff)
+        self.dropout = nn.Dropout(dropout_rate)
     # Pre-LN
-def forward(self, x, mask):
-    x_norm = self.norm1(x)
-    x = x + self.dropout(self.attn(x_norm, x_norm, x_norm, mask))
+    def forward(self, x, mask):
+        x_norm = self.norm1(x)
+        x = x + self.dropout(self.attn(x_norm, x_norm, x_norm, mask))
     
-    x_norm = self.norm2(x)
-    x = x + self.dropout(self.ff(x_norm))
-    return x
+        x_norm = self.norm2(x)
+        x = x + self.dropout(self.ff(x_norm))
+        return x
 
 class DecoderLayer(nn.Module):
     def __init__(self, d_model, num_heads, d_ff, dropout_rate=0.1):
-super().__init__()
-self.norm1 = nn.LayerNorm(d_model)
-self.norm2 = nn.LayerNorm(d_model)
-self.norm3 = nn.LayerNorm(d_model)
-self.attn = MultiHeadAttention(d_model, num_heads)
-self.cross_attn = MultiHeadAttention(d_model, num_heads)
-self.ff = PositionWiseFeedForward(d_model, d_ff)
-self.dropout = nn.Dropout(dropout_rate)
+        super().__init__()
+        self.norm1 = nn.LayerNorm(d_model)
+        self.norm2 = nn.LayerNorm(d_model)
+        self.norm3 = nn.LayerNorm(d_model)
+        self.attn = MultiHeadAttention(d_model, num_heads)
+        self.cross_attn = MultiHeadAttention(d_model, num_heads)
+        self.ff = PositionWiseFeedForward(d_model, d_ff)
+        self.dropout = nn.Dropout(dropout_rate)
     # Pre-LN
-def forward(self, x, enc_output, src_mask, tgt_mask):
-    x_norm = self.norm1(x)
-    x = x + self.dropout(self.attn(x_norm, x_norm, x_norm, tgt_mask))
+    def forward(self, x, enc_output, src_mask, tgt_mask):
+        x_norm = self.norm1(x)
+        x = x + self.dropout(self.attn(x_norm, x_norm, x_norm, tgt_mask))
     
-    x_norm = self.norm2(x)
-    x = x + self.dropout(self.cross_attn(x_norm, enc_output, enc_output, src_mask))
+        x_norm = self.norm2(x)
+        x = x + self.dropout(self.cross_attn(x_norm, enc_output, enc_output, src_mask))
     
-    x_norm = self.norm3(x)
-    x = x + self.dropout(self.ff(x_norm))
-    return x
+        x_norm = self.norm3(x)
+        x = x + self.dropout(self.ff(x_norm))
+        return x
 
 class Transformer(nn.Module):
     def __init__(self, vocab_size, d_model, num_heads, num_layers, d_ff, pad_id, dropout_rate=0.1):
-    super().__init__()
-    self.pad_id = pad_id
-    self.embedding = nn.Embedding(vocab_size, d_model)
-    self.pos_encoder = PositionalEncoding(d_model)
-    self.encoder_layers = nn.ModuleList([EncoderLayer(d_model, num_heads, d_ff, dropout_rate) for _ in range(num_layers)])
-    self.decoder_layers = nn.ModuleList([DecoderLayer(d_model, num_heads, d_ff, dropout_rate) for _ in range(num_layers)])
-    self.fc_out = nn.Linear(d_model, vocab_size)
-    self.dropout = nn.Dropout(dropout_rate)
+        super().__init__()
+        self.pad_id = pad_id
+        self.embedding = nn.Embedding(vocab_size, d_model)
+        self.pos_encoder = PositionalEncoding(d_model)
+        self.encoder_layers = nn.ModuleList([EncoderLayer(d_model, num_heads, d_ff, dropout_rate) for _ in range(num_layers)])
+        self.decoder_layers = nn.ModuleList([DecoderLayer(d_model, num_heads, d_ff, dropout_rate) for _ in range(num_layers)])
+        self.fc_out = nn.Linear(d_model, vocab_size)
+        self.dropout = nn.Dropout(dropout_rate)
     def make_src_mask(self, src):
         return (src != self.pad_id).unsqueeze(1).unsqueeze(2)
     def make_tgt_mask(self, tgt):
@@ -194,17 +194,17 @@ class Transformer(nn.Module):
         seq_mask = torch.tril(torch.ones((seq_len, seq_len), device=tgt.device)).bool()
         return pad_mask & seq_mask
     def forward(self, src, tgt):
-    src_mask = self.make_src_mask(src)
-    tgt_mask = self.make_tgt_mask(tgt)
+        src_mask = self.make_src_mask(src)
+        tgt_mask = self.make_tgt_mask(tgt)
     
-    src_embedded = self.dropout(self.pos_encoder(self.embedding(src)))
-    tgt_embedded = self.dropout(self.pos_encoder(self.embedding(tgt)))
+        src_embedded = self.dropout(self.pos_encoder(self.embedding(src)))
+        tgt_embedded = self.dropout(self.pos_encoder(self.embedding(tgt)))
     
     enc_output = src_embedded
     for layer in self.encoder_layers:
         enc_output = layer(enc_output, src_mask)
         
-    dec_output = tgt_embedded
+        dec_output = tgt_embedded
     for layer in self.decoder_layers:
         dec_output = layer(dec_output, enc_output, src_mask, tgt_mask)
         
