@@ -207,7 +207,6 @@ class Transformer(nn.Module):
         dec_output = tgt_embedded
     for layer in self.decoder_layers:
         dec_output = layer(dec_output, enc_output, src_mask, tgt_mask)
-        
         return self.fc_out(dec_output)
 
 def clean_text(text):
