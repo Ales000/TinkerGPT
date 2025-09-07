@@ -247,14 +247,14 @@ conversations = load_conversations_from_json(DATASET_PATH)
 
 known_questions = [clean_text(q) for q, a in conversations]
 known_words = set(" ".join(known_questions).split())
-max_seq_length = 30
+max_seq_length = 128
 MODEL_PATH = 'tinker_gpt_model.pt'
 TOKENIZER_PATH = 'tinker_gpt_tokenizer.json'
 
-d_model=192
-num_heads=6
-num_layers=4
-d_ff=768
+d_model=768
+num_heads=12
+num_layers=6
+d_ff=3072
 
 if os.path.exists(MODEL_PATH) and os.path.exists(TOKENIZER_PATH):
     print("Загрузка сохраненной модели и токенизатора...")
@@ -292,22 +292,11 @@ else:
     y_labels = torch.LongTensor(y_labels_list).to(device)
     
     learning_rate=0.0001
-    epochs=2500
+    epochs=5000
     dropout_rate = 0.1
     
     model = Transformer(vocab_size, d_model, num_heads, num_layers, d_ff, PAD_ID, dropout_rate).to(device)
-    params_to_train = list(model.embedding.parameters()) + list(model.fc_out.parameters())
-    for layer in model.encoder_layers:
-        params_to_train.extend(list(layer.ff.parameters()))
-        params_to_train.extend(list(layer.norm1.parameters()))
-        params_to_train.extend(list(layer.norm2.parameters()))
-    for layer in model.decoder_layers:
-        params_to_train.extend(list(layer.ff.parameters()))
-        params_to_train.extend(list(layer.norm1.parameters()))
-        params_to_train.extend(list(layer.norm2.parameters()))
-        params_to_train.extend(list(layer.norm3.parameters()))
-    
-    optimizer = optim.Adam(params_to_train, lr=learning_rate)
+    optimizer = optim.Adam(model.parameters(), lr=learning_rate)
     criterion = nn.CrossEntropyLoss(ignore_index=PAD_ID)
     
     print("Начало обучения на PyTorch (Embedding + FC_Out + FF слои + LayerNorm)...")
